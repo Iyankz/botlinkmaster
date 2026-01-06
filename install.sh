@@ -323,7 +323,6 @@ echo ""
 echo "Or use sudo to run as user:"
 echo "   ${YELLOW}sudo -u $ACTUAL_USER bash -c 'cd $(pwd) && source venv/bin/activate && python telegram_bot.py'${NC}"
 echo ""
-echo "For help, visit: https://github.com/yourusername/botlinkmaster"
 echo ""
 
 # Show timezone info
