@@ -9,7 +9,7 @@
 - [Perubahan dari v3](#-perubahan-dari-v3-remonbot)
 - [Struktur Direktori](#-struktur-direktori)
 - [Instalasi](#-instalasi)
-- [Konfigurasi](#-konfigurasi)
+- [Konfigurasi](#-Konfigurasi)
 - [Penggunaan](#-penggunaan)
 - [Command Bot Telegram](#-command-bot-telegram)
 - [Troubleshooting](#-troubleshooting)
@@ -106,12 +106,13 @@ botlinkmaster/
 
 ### Install Otomatis
 
+* Clone repository
 ```bash
-# Clone repository
 git clone https://github.com/Iyankz/botlinkmaster.git
 cd botlinkmaster
-
-# Run installer (akan meminta sudo otomatis)
+```
+* Run installer (akan meminta sudo otomatis)
+```bash
 chmod +x install.sh
 ./install.sh
 ```
