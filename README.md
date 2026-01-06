@@ -4,16 +4,16 @@
 
 ## 📋 Daftar Isi
 
-- [Tentang](#tentang)
-- [Fitur](#fitur)
-- [Perubahan dari v3](#perubahan-dari-v3-remonbot)
+- [Tentang](#-tentang)
+- [Fitur](#-fitur)
+- [Perubahan dari v3](#-perubahan-dari-v3-remonbot)
 - [Struktur Direktori](#-struktur-direktori)
 - [Instalasi](#-instalasi)
-- [Konfigurasi](#konfigurasi)
-- [Penggunaan](#penggunaan)
-- [Command Bot Telegram](#command-bot-telegram)
-- [Troubleshooting](#troubleshooting)
-- [Lisensi](#lisensi)
+- [Konfigurasi](#-konfigurasi)
+- [Penggunaan](#-penggunaan)
+- [Command Bot Telegram](#-command-bot-telegram)
+- [Troubleshooting](#-troubleshooting)
+- [Lisensi](#-lisensi)
 
 ## 🎯 Tentang
 
