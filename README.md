@@ -4,7 +4,7 @@
 
 ## 📋 Daftar Isi
 
-- [Tentang](#-tentang)
+- [Tentang](-#tentang)
 - [Fitur](#-fitur)
 - [Perubahan dari v3](#-perubahan-dari-v3-remonbot)
 - [Struktur Direktori](#-struktur-direktori)
@@ -42,6 +42,7 @@
 - `/add` - Tambah perangkat baru
 - `/device <nama>` - Info detail perangkat
 - `/delete <nama>` - Hapus perangkat
+- `/myid` - Tampilkan Chat ID Anda (untuk konfigurasi akses)
 - `/help` - Bantuan lengkap
 
 ## 🔄 Perubahan dari v3 (remonbot)
@@ -106,13 +107,12 @@ botlinkmaster/
 
 ### Install Otomatis
 
-* Clone repository
 ```bash
+# Clone repository
 git clone https://github.com/Iyankz/botlinkmaster.git
 cd botlinkmaster
-```
-* Run installer (akan meminta sudo otomatis)
-```bash
+
+# Run installer (akan meminta sudo otomatis)
 chmod +x install.sh
 ./install.sh
 ```
@@ -159,7 +159,23 @@ DATABASE_URL=sqlite:///botlinkmaster.db
 LOG_LEVEL=INFO
 ```
 
-### 2. (Opsional) Edit config.py
+### 2. (Opsional) Batasi Akses Bot
+
+Agar hanya user tertentu yang bisa akses:
+
+```bash
+# 1. Dapatkan Chat ID dengan kirim /myid ke bot
+# 2. Tambahkan ke .env:
+nano .env
+
+# Single user:
+ALLOWED_CHAT_IDS=123456789
+
+# Multiple users (pisah dengan koma):
+ALLOWED_CHAT_IDS=123456789,987654321,456789123
+```
+
+### 3. (Opsional) Edit config.py
 
 ```python
 # Database
@@ -248,13 +264,48 @@ Cek status interface (command utama):
 ### /delete <nama>
 Hapus perangkat dari database
 
+### /myid
+Tampilkan Chat ID Anda untuk konfigurasi ALLOWED_CHAT_IDS
+
 ## 🐛 Troubleshooting
 
-### Bot tidak bisa start
+### Bot tidak bisa start - Token tidak ditemukan
+
 ```bash
-# Cek token
+# Pastikan .env ada dan berisi token
 cat .env | grep TELEGRAM_BOT_TOKEN
 
+# Pastikan venv aktif
+source venv/bin/activate
+
+# Test load .env
+python3 -c "from dotenv import load_dotenv; import os; load_dotenv(); print(os.getenv('TELEGRAM_BOT_TOKEN'))"
+```
+
+**Penting:** Token TIDAK boleh ada spasi di sekitar `=`
+- ❌ SALAH: `TELEGRAM_BOT_TOKEN = token`
+- ✅ BENAR: `TELEGRAM_BOT_TOKEN=token`
+
+Lihat [TROUBLESHOOTING.md](TROUBLESHOOTING.md) untuk guide lengkap
+
+### Bot running tapi tidak bisa diakses
+
+Cek apakah Chat ID Anda ada di ALLOWED_CHAT_IDS:
+
+```bash
+# Dapatkan Chat ID
+# Kirim /myid ke bot
+
+# Edit .env
+nano .env
+
+# Tambahkan Chat ID:
+ALLOWED_CHAT_IDS=123456789
+```
+
+### Module not found
+
+```bash
 # Cek dependencies
 source venv/bin/activate
 python -c "import telegram; print('OK')"
@@ -271,7 +322,6 @@ python -c "import telegram; print('OK')"
 chmod 600 .env config.py
 chmod +x install.sh docker-run.sh cli.py
 ```
-
 ## 📝 Lisensi
 
 MIT License - lihat file [LICENSE](LICENSE) untuk detail
