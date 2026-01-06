@@ -275,21 +275,43 @@ chmod +x install.sh docker-run.sh cli.py
 
 MIT License - lihat file [LICENSE](LICENSE) untuk detail
 
-## 👨‍💻 Pembuat
 
-**Yayang Ardiansyah**
+## 👥 Credits
+
+* [**Iyankz**](https://github.com/Iyankz) (Developer & Tester)
+* [**Gemini**](https://gemini.google.com/) (AI Partner & Technical Assistant)
+* [**Claude**](https://claude.ai/) (AI Partner & Technical Assistant)
+
+## 👥 Contributors
+
+
+- [Iyankz](https://github.com/Iyankz) - Developer
+- [Gemini](https://gemini.google.com/) - AI Assistant
+- [Claude](https://claude.ai/) - AI Assistant
+
+---
+
+## ⭐ Support This Project
+
+If remonbot helps you:
+1. ⭐ Star this repository
+2. 🐛 Report bugs to help improve
+3. 💡 Suggest features
+4. 🔄 Share with other network engineers
+5. ☕ Buy me a coffee (optional)
+
+---
+
+**Made with ❤️ for Network Engineers**
+
+🚀 **Auto Discovery • Multi-Vendor • Per-Interface Monitoring**
+
 
 ## 🙏 Penghargaan
 
 - Paramiko untuk library SSH
 - python-telegram-bot untuk integrasi Telegram
 - SQLAlchemy untuk ORM database
-
-## 📞 Dukungan
-
-Jika ada pertanyaan atau issue:
-1. Buka issue di GitHub
-2. Kontak via Telegram: @yourusername
 
 ---
 
