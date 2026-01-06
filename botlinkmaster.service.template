@@ -1,0 +1,38 @@
+[Unit]
+Description=BotLinkMaster v4.0 - Network Device Monitoring Bot
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+WorkingDirectory=/path/to/botlinkmaster
+Environment="PATH=/path/to/botlinkmaster/venv/bin"
+EnvironmentFile=/path/to/botlinkmaster/.env
+ExecStart=/path/to/botlinkmaster/venv/bin/python /path/to/botlinkmaster/telegram_bot.py
+
+# Restart policy
+Restart=on-failure
+RestartSec=10s
+
+# Resource limits (optional)
+# MemoryLimit=256M
+# CPUQuota=50%
+
+# Security hardening (optional)
+# NoNewPrivileges=true
+# PrivateTmp=true
+# ProtectSystem=strict
+# ProtectHome=true
+# ReadWritePaths=/path/to/botlinkmaster
+
+[Install]
+WantedBy=multi-user.target
+
+# Installation Instructions:
+# 1. Copy this file to /etc/systemd/system/botlinkmaster.service
+# 2. Replace YOUR_USERNAME with your actual username
+# 3. Replace /path/to/botlinkmaster with actual path
+# 4. Run: sudo systemctl daemon-reload
+# 5. Run: sudo systemctl enable botlinkmaster
+# 6. Run: sudo systemctl start botlinkmaster
+# 7. Check status: sudo systemctl status botlinkmaster
