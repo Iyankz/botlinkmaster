@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # BotLinkMaster v4.0 - Installation Script
-# Author: Yayang Ardiansyah
+# Author: Iyankz
 # Requires: root/sudo privileges for system package installation
 
 set -e
