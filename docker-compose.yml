@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  botlinkmaster:
+    build: .
+    container_name: botlinkmaster
+    restart: unless-stopped
+    
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - DATABASE_URL=sqlite:////data/botlinkmaster.db
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - TZ=${TZ:-UTC}
+    
+    volumes:
+      # Persist database and logs
+      - ./data:/data
+      - ./logs:/app/logs
+    
+    networks:
+      - botlinkmaster-network
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  botlinkmaster-network:
+    driver: bridge
