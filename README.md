@@ -108,7 +108,7 @@ botlinkmaster/
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/botlinkmaster.git
+git clone https://github.com/Iyankz/botlinkmaster.git
 cd botlinkmaster
 
 # Run installer (akan meminta sudo otomatis)
