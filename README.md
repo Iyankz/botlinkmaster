@@ -9,6 +9,11 @@
 - [Perubahan dari v3](#-perubahan-dari-v3-remonbot)
 - [Struktur Direktori](#-struktur-direktori)
 - [Instalasi](#-instalasi)
+- [Konfigurasi](#-konfigurasi)
+- [Penggunaan](#-penggunaan)
+- [Command Bot Telegram](#-command-bot-telegram)
+- [Troubleshooting](#-troubleshooting)
+- [Lisensi](#-lisensi)
 
 ## 🎯 Tentang
 
