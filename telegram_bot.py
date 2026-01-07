@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.0 - Telegram Bot Interface
+BotLinkMaster v4.1 - Telegram Bot Interface
 Telegram bot for managing and monitoring network devices
 
 Author: Yayang Ardiansyah
@@ -81,7 +81,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     chat_id = update.effective_chat.id
     welcome_message = """
-🤖 *BotLinkMaster v4\.0*
+🤖 *BotLinkMaster v4\.1\.0*
 
 Selamat datang\! Bot ini membantu Anda memonitor perangkat jaringan\.
 
@@ -529,12 +529,30 @@ def main():
         print("\nContoh isi .env:")
         print("TELEGRAM_BOT_TOKEN=123456:ABCdefGHIjklMNOpqrsTUVwxyz")
         print("\nDapatkan token dari @BotFather di Telegram")
+        print("\n🔧 Run diagnostic: python diagnose.py")
         return
     
     logger.info("Starting BotLinkMaster Telegram Bot...")
+    logger.info(f"Token: {token[:10]}... (length: {len(token)})")
+    
+    # Verify token format
+    if ':' not in token:
+        logger.error("Invalid token format!")
+        print("\n❌ ERROR: Token format tidak valid!")
+        print("Token harus seperti: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz")
+        print("\n🔧 Run diagnostic: python diagnose.py")
+        return
     
     # Create application
-    application = Application.builder().token(token).build()
+    try:
+        application = Application.builder().token(token).build()
+        logger.info("Application created successfully")
+    except Exception as e:
+        logger.error(f"Failed to create application: {e}")
+        print(f"\n❌ ERROR: Gagal membuat application!")
+        print(f"Error: {e}")
+        print("\n🔧 Run diagnostic: python diagnose.py")
+        return
     
     # Register command handlers
     application.add_handler(CommandHandler("start", start))
@@ -545,6 +563,7 @@ def main():
     application.add_handler(CommandHandler("device", device_info))
     application.add_handler(CommandHandler("cek", check_interface))
     application.add_handler(CommandHandler("delete", delete_device))
+    logger.info("Command handlers registered")
     
     # Register error handler
     application.add_error_handler(error_handler)
@@ -557,12 +576,24 @@ def main():
     
     if ALLOWED_CHAT_IDS:
         print(f"\n🔒 Access restriction enabled for {len(ALLOWED_CHAT_IDS)} chat ID(s)")
+        logger.info(f"Access restricted to: {ALLOWED_CHAT_IDS}")
     else:
         print("\n⚠️  No access restriction (all users can use the bot)")
+        logger.info("No access restriction - all users allowed")
     
     print("\n[Press Ctrl+C to stop]\n")
+    print("📋 Troubleshooting:")
+    print("   - If bot doesn't respond, check: tail -f botlinkmaster.log")
+    print("   - Run diagnostic: python diagnose.py")
+    print("   - Test basic bot: python test_bot.py")
+    print()
     
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    try:
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    except Exception as e:
+        logger.error(f"Error during polling: {e}")
+        print(f"\n❌ ERROR: {e}")
+        print("\n🔧 Run diagnostic: python diagnose.py")
 
 
 if __name__ == '__main__':
