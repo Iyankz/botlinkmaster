@@ -425,6 +425,8 @@ chmod +x install.sh docker-run.sh cli.py
 
 MIT License - lihat file [LICENSE](LICENSE) untuk detail
 
+----
+
 ## 👥 Credits & 👥 Contributors
 
 * [**Iyankz**](https://github.com/Iyankz) (Developer & Tester)
