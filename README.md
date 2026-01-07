@@ -1,11 +1,12 @@
-# BotLinkMaster v4.0
+# BotLinkMaster v4.1.0
 
 🤖 Bot monitoring perangkat jaringan via SSH/Telnet dengan integrasi Telegram
 
 ## 📋 Daftar Isi
 
-- [Tentang](-#tentang)
+- [Tentang](#-tentang)
 - [Fitur](#-fitur)
+- [Requirements](#-requirements)
 - [Perubahan dari v3](#-perubahan-dari-v3-remonbot)
 - [Struktur Direktori](#-struktur-direktori)
 - [Instalasi](#-instalasi)
@@ -44,6 +45,75 @@
 - `/delete <nama>` - Hapus perangkat
 - `/myid` - Tampilkan Chat ID Anda (untuk konfigurasi akses)
 - `/help` - Bantuan lengkap
+
+## 📋 Requirements
+
+### System Requirements
+
+**Minimum:**
+- **OS:** Ubuntu 20.04+, Debian 10+, CentOS 7+, RHEL 7+, Fedora 30+, Arch Linux
+- **CPU:** 1 Core
+- **RAM:** 512 MB
+- **Storage:** 100 MB (aplikasi) + 50-200 MB (database, tergantung jumlah perangkat)
+- **Network:** Koneksi internet untuk Telegram API
+
+**Direkomendasikan:**
+- **OS:** Ubuntu 22.04 LTS atau Debian 11+
+- **CPU:** 2 Cores
+- **RAM:** 1 GB
+- **Storage:** 500 MB
+- **Network:** Koneksi internet stabil
+
+### Software Requirements
+
+**System Packages (otomatis terinstall oleh installer):**
+- Python 3.8 atau lebih baru (direkomendasikan Python 3.11+)
+- python3-pip, python3-venv
+- git
+- curl, wget
+- openssh-client, telnet
+- tzdata
+
+**Python Packages (otomatis terinstall oleh installer):**
+```
+paramiko==3.4.0          # Untuk koneksi SSH
+python-telegram-bot==20.7 # Untuk Telegram Bot
+SQLAlchemy==2.0.25       # Untuk database ORM
+click==8.1.7             # Untuk CLI
+rich==13.7.0             # Untuk CLI formatting
+python-dotenv==1.0.0     # Untuk .env file support
+```
+
+### Network Requirements
+
+**Ports yang Dibutuhkan:**
+- **Outbound:**
+  - Port 443 (HTTPS) - Untuk Telegram API
+  - Port 22 (SSH) - Untuk koneksi ke perangkat jaringan
+  - Port 23 (Telnet) - Untuk koneksi ke perangkat jaringan (opsional)
+
+**Tidak memerlukan inbound ports** - Bot menggunakan polling dari Telegram API
+
+### Telegram Requirements
+
+- **Bot Token** dari [@BotFather](https://t.me/botfather)
+- Akun Telegram untuk menggunakan bot
+
+### Target Device Requirements
+
+Perangkat jaringan yang akan dimonitor harus:
+- Support SSH dan/atau Telnet
+- User account dengan akses ke show commands
+- Reachable dari server bot
+- Standard command output (Cisco-like preferred)
+
+**Supported Devices:**
+- Cisco IOS/IOS-XE
+- Cisco NX-OS
+- Juniper JunOS
+- HP/Aruba
+- MikroTik
+- Generic SSH/Telnet devices
 
 ## 🔄 Perubahan dari v3 (remonbot)
 
@@ -109,7 +179,7 @@ botlinkmaster/
 
 ```bash
 # Clone repository
-git clone https://github.com/Iyankz/botlinkmaster.git
+git clone https://github.com/yourusername/botlinkmaster.git
 cd botlinkmaster
 
 # Run installer (akan meminta sudo otomatis)
@@ -188,7 +258,48 @@ TELNET_TIMEOUT = 30
 
 ## 📱 Penggunaan
 
-### Jalankan Bot
+### Jalankan sebagai System Service (Recommended)
+
+**Cara termudah - Bot jalan otomatis di background:**
+
+```bash
+# Setup service (dilakukan sekali)
+sudo ./setup-service.sh
+
+# Start bot
+sudo systemctl start botlinkmaster
+
+# Enable auto-start on boot
+sudo systemctl enable botlinkmaster
+
+# Check status
+sudo systemctl status botlinkmaster
+
+# View logs
+sudo journalctl -u botlinkmaster -f
+```
+
+**Atau gunakan script `botctl` untuk kemudahan:**
+
+```bash
+chmod +x botctl
+
+# Start
+sudo ./botctl start
+
+# Stop  
+sudo ./botctl stop
+
+# Status
+sudo ./botctl status
+
+# Logs
+sudo ./botctl logs
+```
+
+Lihat [SERVICE_GUIDE.md](SERVICE_GUIDE.md) untuk panduan lengkap.
+
+### Jalankan Manual (Development)
 
 ```bash
 # Activate virtual environment
@@ -196,21 +307,6 @@ source venv/bin/activate
 
 # Run bot
 python telegram_bot.py
-```
-
-### Jalankan sebagai Service
-
-```bash
-# Copy service file
-sudo cp botlinkmaster.service.template /etc/systemd/system/botlinkmaster.service
-
-# Edit paths
-sudo nano /etc/systemd/system/botlinkmaster.service
-
-# Enable and start
-sudo systemctl enable botlinkmaster
-sudo systemctl start botlinkmaster
-sudo systemctl status botlinkmaster
 ```
 
 ### Jalankan dengan Docker
@@ -225,6 +321,8 @@ docker-compose up -d
 # View logs
 docker-compose logs -f
 ```
+
+---
 
 ## 🤖 Command Bot Telegram
 
@@ -322,23 +420,16 @@ python -c "import telegram; print('OK')"
 chmod 600 .env config.py
 chmod +x install.sh docker-run.sh cli.py
 ```
+
 ## 📝 Lisensi
 
 MIT License - lihat file [LICENSE](LICENSE) untuk detail
 
-
-## 👥 Credits
+## 👥 Credits & 👥 Contributors
 
 * [**Iyankz**](https://github.com/Iyankz) (Developer & Tester)
 * [**Gemini**](https://gemini.google.com/) (AI Partner & Technical Assistant)
 * [**Claude**](https://claude.ai/) (AI Partner & Technical Assistant)
-
-## 👥 Contributors
-
-
-- [Iyankz](https://github.com/Iyankz) - Developer
-- [Gemini](https://gemini.google.com/) - AI Assistant
-- [Claude](https://claude.ai/) - AI Assistant
 
 ---
 
@@ -366,4 +457,4 @@ If remonbot helps you:
 
 ---
 
-**BotLinkMaster v4.0** - Monitoring Perangkat Jaringan Menjadi Mudah 🚀
+**BotLinkMaster v4.1** - Monitoring Perangkat Jaringan Menjadi Mudah 🚀
