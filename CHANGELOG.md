@@ -2,6 +2,80 @@
 
 All notable changes to BotLinkMaster will be documented in this file.
 
+## [4.1.0] - 2026-01-07
+
+### 🎉 Major Update - Service Edition
+
+#### Added - Systemd Service Integration
+- **Complete systemd service support** - Bot runs as background service
+- **`install-complete.sh`** - One-command installer that sets up everything
+- **`botctl`** - Easy service management script (start, stop, restart, status, logs)
+- **`setup-service.sh`** - Manual service installer
+- **`botlinkmaster.service`** - Production-ready systemd service file
+- Auto-start on boot (enabled by default)
+- Auto-restart on crash (10s delay, max 5 attempts)
+- Resource limits (512MB RAM, 100% CPU)
+- Security hardening (NoNewPrivileges, ProtectSystem, etc)
+- Integrated logging with systemd journal
+
+#### Added - Environment & Configuration
+- **`.env` file support with python-dotenv** - Fixed environment variable loading
+- **ALLOWED_CHAT_IDS** - Restrict bot access to specific Telegram users
+- `/myid` command - Users can get their Chat ID for access control
+- Authorization check on all commands
+- Access denied message with user's Chat ID
+
+#### Added - Diagnostic Tools
+- **`diagnose.py`** - Complete diagnostic script
+  - Check .env file
+  - Verify bot token
+  - Test Telegram API connection
+  - Check dependencies
+  - Verify database
+  - Show bot info (username, ID)
+- **`test_bot.py`** - Simple test bot for connection verification
+- Enhanced logging with verbose output
+- Token validation in startup
+
+#### Added - Documentation
+- **`README_SERVICE.md`** - Service-focused main documentation
+- **`SERVICE_GUIDE.md`** - Complete systemd service guide
+- **`QUICKSTART_SERVICE.md`** - 5-minute quick start for service mode
+- **`DEPLOYMENT_SUMMARY.md`** - Full deployment overview
+- **`INSTALL_CARD.txt`** - Quick reference installation card
+- **`QUICK_FIX.md`** - Fast problem resolution guide
+- **`TROUBLESHOOTING.md`** - Enhanced with service troubleshooting
+- **`FIX_SUMMARY_v4.0.1.md`** - Fix documentation for .env loading
+
+#### Changed
+- Installer now offers systemd service setup during installation
+- Enhanced error messages with troubleshooting hints
+- Improved logging format and verbosity
+- Bot startup now includes comprehensive checks
+- All scripts made executable with proper permissions
+
+#### Fixed
+- **Critical:** Fixed .env file not loading (missing load_dotenv())
+- **Critical:** Bot token not found error resolved
+- Fixed color output in install.sh (echo -e for escape sequences)
+- Fixed install-simple.sh for terminals without color support
+
+#### Security
+- Chat ID-based access control
+- Service runs as non-root user
+- Limited file system access
+- Protected system directories
+- No new privileges allowed
+- Private temporary directory
+
+#### Performance
+- Resource limits prevent runaway processes
+- Memory cap at 512MB
+- CPU quota at 100% (1 core)
+- Efficient restart policy
+
+---
+
 ## [4.0.0] - 2026-01-06
 
 ### 🎉 Major Release - Complete Rewrite
@@ -98,5 +172,59 @@ End of Life - No longer supported
 
 ---
 
-**Current Stable:** v4.0.0  
-**Next Release:** v4.1.0 (Q1 2026)
+## Upgrade Paths
+
+### v4.0.x → v4.1.0
+
+**What's New:**
+- Systemd service integration
+- Auto-start on boot
+- Easy management with botctl
+- Chat ID access control
+- Enhanced diagnostics
+
+**How to Upgrade:**
+
+1. Stop current bot:
+   ```bash
+   # If running manually:
+   Ctrl+C
+   
+   # If running as old service:
+   sudo systemctl stop botlinkmaster
+   ```
+
+2. Backup data:
+   ```bash
+   cp .env .env.backup
+   cp botlinkmaster.db botlinkmaster.db.backup
+   ```
+
+3. Pull updates:
+   ```bash
+   git pull
+   ```
+
+4. Run new installer:
+   ```bash
+   chmod +x install-complete.sh
+   sudo ./install-complete.sh
+   ```
+
+5. Restore .env:
+   ```bash
+   cp .env.backup .env
+   ```
+
+6. Start service:
+   ```bash
+   sudo systemctl start botlinkmaster
+   ```
+
+**No breaking changes** - All v4.0 data and configs are compatible!
+
+---
+
+**Current Stable:** v4.1.0  
+**Previous Stable:** v4.0.0  
+**Next Release:** v4.2.0 (Q1 2026) - Advanced Monitoring Features
