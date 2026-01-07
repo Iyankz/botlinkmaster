@@ -128,44 +128,103 @@ Perangkat jaringan yang akan dimonitor harus:
 
 ## 📁 Struktur Direktori
 
-### 📂 Di Git Repository (20 files)
+### 📂 Di Git Repository (v4.1.0 - 35+ files)
 
 ```
 botlinkmaster/
-├── botlinkmaster.py                   # Main SSH/Telnet module
-├── database.py                        # Database ORM
-├── telegram_bot.py                    # Telegram bot interface
-├── cli.py                             # CLI tool
-├── config_example.py                  # Config template
-├── .env.example                       # Env template
-├── .gitignore                         # Git ignore
-├── Dockerfile                         # Docker image
-├── docker-compose.yml                 # Docker Compose
-├── docker-run.sh                      # Docker script
-├── install.sh                         # Installer
-├── requirements.txt                   # Dependencies
-├── botlinkmaster.service.template     # Systemd template
-├── README.md                          # Main docs
-├── QUICKSTART.md                      # Quick guide
-├── EXAMPLES.md                        # Examples
-├── INSTALLATION_FLOW.md               # Install flow
-├── PROJECT_STRUCTURE.md               # Structure docs
-├── MILESTONES.md                      # Roadmap
-├── CHANGELOG.md                       # Version history
-└── LICENSE                            # MIT License
+│
+├── README.md                              # ⭐ Main documentation (root level!)
+│
+├── 🐍 Core Python Modules
+│   ├── telegram_bot.py                    # Main Telegram bot
+│   ├── botlinkmaster.py                   # SSH/Telnet handler
+│   ├── database.py                        # Database ORM
+│   └── cli.py                             # CLI tool
+│
+├── 🔧 Service & Installation (NEW v4.1.0!)
+│   ├── install-complete.sh                # 🆕 One-command installer
+│   ├── botctl                             # 🆕 Service manager tool
+│   ├── setup-service.sh                   # 🆕 Manual service setup
+│   ├── install.sh                         # Legacy installer
+│   ├── install-simple.sh                  # Simple installer (no colors)
+│   └── botlinkmaster.service              # Systemd service file
+│
+├── 🔍 Diagnostic Tools (NEW v4.1.0!)
+│   ├── diagnose.py                        # 🆕 Complete diagnostic
+│   └── test_bot.py                        # 🆕 Connection tester
+│
+├── 🐳 Docker
+│   ├── Dockerfile                         # Docker image
+│   ├── docker-compose.yml                 # Docker Compose
+│   └── docker-run.sh                      # Docker script
+│
+├── ⚙️ Configuration
+│   ├── .env.example                       # Environment template
+│   ├── env.example                        # Environment template backup
+│   ├── config_example.py                  # Config template
+│   └── requirements.txt                   # Python dependencies
+│
+├── 📚 Documentation Files (all at root level for easy access)
+│   │
+│   ├── 🇬🇧 English Documentation
+│   │   ├── README_SERVICE.md              # 🆕 Service edition README
+│   │   ├── QUICKSTART.md                  # Quick start guide
+│   │   ├── QUICKSTART_SERVICE.md          # 🆕 Service quick start
+│   │   ├── SERVICE_GUIDE.md               # 🆕 Complete service guide
+│   │   ├── BOTCTL_GUIDE.md                # 🆕 botctl documentation
+│   │   ├── REQUIREMENTS.md                # 🆕 Complete requirements
+│   │   ├── TROUBLESHOOTING.md             # Troubleshooting guide
+│   │   ├── QUICK_FIX.md                   # 🆕 Quick fixes
+│   │   ├── EXAMPLES.md                    # Usage examples
+│   │   ├── INSTALLATION_FLOW.md           # Installation flow
+│   │   ├── PROJECT_STRUCTURE.md           # Project structure
+│   │   ├── DEPLOYMENT_SUMMARY.md          # 🆕 Deployment info
+│   │   ├── CHANGELOG.md                   # Version history
+│   │   ├── MILESTONES.md                  # Roadmap
+│   │   └── RELEASE_NOTES_v4.1.0.md        # 🆕 Release notes
+│   │
+│   ├── 🇮🇩 Indonesian Documentation (NEW v4.1.0!)
+│   │   ├── README_ID.md                   # 🆕 Main docs (Indonesia)
+│   │   ├── QUICKSTART_ID.md               # 🆕 Quick start (Indonesia)
+│   │   ├── RELEASE_NOTES_v4.1.0_ID.md     # 🆕 Release notes (Indonesia)
+│   │   └── FIX_SUMMARY_v4.0.1.md          # Fix summary
+│   │
+│   └── 📄 Quick Reference Cards (NEW v4.1.0!)
+│       ├── INSTALL_CARD.txt               # 🆕 Installation reference
+│       ├── INSTALL_CARD_ID.txt            # 🆕 Installation (Indonesia)
+│       ├── REQUIREMENTS_CARD.txt          # 🆕 Requirements reference
+│       ├── RELEASE_v4.1.0.txt             # 🆕 Release summary
+│       └── FIXED_ISSUES.txt               # Fixed issues log
+│
+├── 📋 Meta Files
+│   ├── .gitignore                         # Git ignore rules
+│   ├── LICENSE                            # MIT License
+│   └── VERSION                            # 🆕 Version number (4.1.0)
+│
+└── 🗑️ Legacy/Backup
+    └── botlinkmaster.service.template     # Old service template
+
+NOTE: Semua file dokumentasi ada di root directory (tidak di subfolder)
+      sehingga mudah diakses dan README.md langsung tampil di GitHub.
 ```
 
-### 🚀 Setelah Instalasi
+### 🚀 Setelah Instalasi (Runtime Files)
 
 ```
 botlinkmaster/
-├── (all 20 files from Git)
-├── .env                               # ✨ Environment vars (CREATED)
-├── config.py                          # ✨ Configuration (CREATED)
-├── venv/                              # ✨ Virtual environment (CREATED)
-├── botlinkmaster.db                   # ✨ Database (CREATED on first run)
-├── botlinkmaster.log                  # ✨ Logs (CREATED on running)
-└── __pycache__/                       # ✨ Python cache (CREATED)
+├── (Semua 35+ files dari Git Repository)
+│
+├── ✨ Generated Files
+│   ├── .env                               # Environment vars (CREATED)
+│   ├── config.py                          # Configuration (CREATED)
+│   ├── venv/                              # Virtual environment (CREATED)
+│   ├── botlinkmaster.db                   # SQLite database (CREATED)
+│   ├── botlinkmaster.log                  # Application logs (CREATED)
+│   └── __pycache__/                       # Python cache (CREATED)
+│
+└── 🔧 System Files
+    └── /etc/systemd/system/
+        └── botlinkmaster.service          # Installed service (CREATED)
 ```
 
 **⚠️ PENTING - Privilege:**
@@ -179,7 +238,7 @@ botlinkmaster/
 
 ```bash
 # Clone repository
-git clone https://github.com/Iyankz/botlinkmaster.git
+git clone https://github.com/yourusername/botlinkmaster.git
 cd botlinkmaster
 
 # Run installer (akan meminta sudo otomatis)
@@ -425,7 +484,8 @@ chmod +x install.sh docker-run.sh cli.py
 
 MIT License - lihat file [LICENSE](LICENSE) untuk detail
 
-----
+
+---
 
 ## 👥 Credits & 👥 Contributors
 
