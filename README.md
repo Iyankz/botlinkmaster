@@ -236,12 +236,13 @@ botlinkmaster/
 
 ### Install Otomatis
 
+* # Clone repository
 ```bash
-# Clone repository
 git clone https://github.com/yourusername/botlinkmaster.git
 cd botlinkmaster
-
-# Run installer (akan meminta sudo otomatis)
+```
+* # Run installer (akan meminta sudo otomatis)
+```bash
 chmod +x install.sh
 ./install.sh
 ```
