@@ -19,8 +19,8 @@ print_info() { echo -e "${BLUE}ℹ${NC} $1"; }
 
 clear
 echo "╔════════════════════════════════════════════════╗"
-echo "║     BotLinkMaster v4.1.0 - Complete Setup     ║"
-echo "║     Systemd Service + Auto-Start              ║"
+echo "║     BotLinkMaster v4.1.0 - Complete Setup      ║"
+echo "║     Systemd Service + Auto-Start               ║"
 echo "╚════════════════════════════════════════════════╝"
 echo ""
 
