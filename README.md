@@ -51,7 +51,7 @@
 ### System Requirements
 
 **Minimum:**
-- **OS:** Ubuntu 20.04+, Debian 10+, CentOS 7+, RHEL 7+, Fedora 30+, Arch Linux
+- **OS:** Ubuntu 20.04+, Debian 10+
 - **CPU:** 1 Core
 - **RAM:** 512 MB
 - **Storage:** 100 MB (aplikasi) + 50-200 MB (database, tergantung jumlah perangkat)
@@ -238,7 +238,7 @@ botlinkmaster/
 
 * Clone repository
 ```bash
-git clone https://github.com/yourusername/botlinkmaster.git
+git clone https://github.com/Iyankz/botlinkmaster.git
 cd botlinkmaster
 ```
 * Run installer (akan meminta sudo otomatis)
