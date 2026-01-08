@@ -239,7 +239,7 @@ botlinkmaster/
 * Clone repository
 ```bash
 git clone https://github.com/Iyankz/botlinkmaster.git
-cd botlinkmaster
+cd /botlinkmaster/'🔧 Service & Installation (NEW v4.1.0!)'
 ```
 * Run installer (akan meminta sudo otomatis)
 ```bash
