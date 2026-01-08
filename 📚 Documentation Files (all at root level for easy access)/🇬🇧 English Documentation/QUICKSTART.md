@@ -29,9 +29,20 @@ chmod +x install.sh
 # Edit .env file
 nano .env
 
-# Add your bot token:
-TELEGRAM_BOT_TOKEN=your_token_from_botfather
+# Tambahkan bot token (TIDAK ADA SPASI di sekitar tanda =):
+TELEGRAM_BOT_TOKEN=123456:ABCdefGHIjklMNOpqrsTUVwxyz
+
+# OPSIONAL: Batasi akses hanya untuk chat ID tertentu
+# Dapatkan chat ID dengan kirim /myid ke bot
+# ALLOWED_CHAT_IDS=123456789,987654321
+
+# Save: Ctrl+X, Y, Enter
 ```
+
+**⚠️ PENTING:**
+- Token TIDAK boleh ada spasi di sekitar `=`
+- Contoh SALAH: `TELEGRAM_BOT_TOKEN = your_token`
+- Contoh BENAR: `TELEGRAM_BOT_TOKEN=123456:ABC...`
 
 ### 4️⃣ Jalankan Bot
 ```bash
@@ -86,8 +97,48 @@ docker-compose logs -f
 1. Open Telegram
 2. Search for your bot
 3. Send `/start`
-4. Add a device with `/add`
-5. Check interface with `/cek`
+4. Get your Chat ID with `/myid` (untuk configurasi ALLOWED_CHAT_IDS)
+5. Add a device with `/add`
+6. Check interface with `/cek`
+
+---
+
+## 🔒 Membatasi Akses Bot (Opsional)
+
+Jika ingin hanya Anda yang bisa akses bot:
+
+1. **Dapatkan Chat ID:**
+   ```
+   /myid
+   ```
+   Bot akan reply: `Chat ID: 123456789`
+
+2. **Edit .env:**
+   ```bash
+   nano .env
+   ```
+   Tambahkan:
+   ```
+   ALLOWED_CHAT_IDS=123456789
+   ```
+   Untuk multiple users: `ALLOWED_CHAT_IDS=123456789,987654321`
+
+3. **Restart bot:**
+   ```bash
+   # Ctrl+C untuk stop, lalu:
+   python telegram_bot.py
+   ```
+
+---
+
+## 🐛 Troubleshooting
+
+Jika bot tidak bisa start, lihat [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+
+Common issues:
+- ❌ Token tidak ditemukan → Cek file .env dan pastikan venv aktif
+- ❌ Module not found → Jalankan `pip install -r requirements.txt`
+- ❌ Access Denied → Tambahkan Chat ID Anda ke ALLOWED_CHAT_IDS
 
 ---
 

@@ -1,11 +1,35 @@
 # 🎯 BotLinkMaster - Milestones & Roadmap
 
-**Current Version:** v4.0  
-**Last Updated:** January 6, 2026
+**Current Version:** v4.1.0  
+**Last Updated:** January 7, 2026
 
 ---
 
-## ✅ v4.0 - Foundation Release (Released)
+## ✅ v4.1.0 - Service Edition (Released)
+**Release Date:** January 7, 2026  
+**Status:** ✅ Completed
+
+### Fitur yang Telah Selesai:
+- ✅ Systemd service integration
+- ✅ One-command installer (`install-complete.sh`)
+- ✅ Service management tool (`botctl`)
+- ✅ Auto-start on boot
+- ✅ Auto-restart on crash
+- ✅ Background service mode
+- ✅ Environment file support (.env with dotenv)
+- ✅ Chat ID access control (ALLOWED_CHAT_IDS)
+- ✅ `/myid` command
+- ✅ Authorization checks
+- ✅ Enhanced diagnostics (`diagnose.py`)
+- ✅ Test bot (`test_bot.py`)
+- ✅ Integrated logging (journalctl)
+- ✅ Resource limits (512MB RAM, 1 CPU)
+- ✅ Security hardening
+- ✅ Comprehensive documentation (SERVICE_GUIDE.md, etc)
+
+---
+
+## ✅ v4.0.0 - Foundation Release (Released)
 **Release Date:** January 6, 2026
 
 ### Fitur yang Telah Selesai:
@@ -23,9 +47,9 @@
 
 ---
 
-## 🚧 v4.1 - Stability & Enhancement (Q1 2026)
+## 🚧 v4.2.0 - Stability & Enhancement (Q1 2026)
 **Status:** Planned  
-**Fokus:** Stabilitas & Peningkatan
+**Fokus:** Stabilitas & Peningkatan Performance
 
 ### Fitur yang Direncanakan:
 - [ ] Dukungan multi-vendor (Cisco, Huawei, Juniper, Mikrotik)
@@ -35,18 +59,21 @@
 - [ ] Export device list to CSV
 - [ ] Interface bandwidth monitoring
 - [ ] Scheduled checks (cron-like)
-- [ ] User authentication for Telegram bot
+- [ ] User management (multi-user per bot)
 - [ ] Rate limiting per user
+- [ ] Database backup automation
 
 ### Peningkatan:
 - [ ] Better interface parsing
 - [ ] Performance optimization
 - [ ] Unit tests dan integration tests
 - [ ] CI/CD pipeline setup
+- [ ] Health check endpoint
+- [ ] Prometheus metrics export
 
 ---
 
-## 📋 v4.2 - Advanced Monitoring (Q2 2026)
+## 📋 v4.3.0 - Advanced Monitoring (Q2 2026)
 **Status:** Planned  
 **Fokus:** Monitoring Tingkat Lanjut
 
@@ -59,15 +86,18 @@
 - [ ] Interface traffic statistics
 - [ ] Custom monitoring scripts
 - [ ] Dashboard view in Telegram
+- [ ] Grafana integration
+- [ ] SNMP trap receiver
 
 ### Database:
 - [ ] PostgreSQL migration guide
 - [ ] Data retention policies
 - [ ] Backup and restore tools
+- [ ] Query optimization
 
 ---
 
-## 🌟 v5.0 - Web Platform (Q3 2026)
+## 🌟 v5.0.0 - Web Platform (Q3 2026)
 **Status:** Future  
 **Fokus:** Web Interface & API
 
@@ -80,12 +110,14 @@
 - [ ] Configuration backup & restore
 - [ ] Device configuration management
 - [ ] Template-based device provisioning
+- [ ] Network topology visualization
 
 ### Advanced:
 - [ ] Kubernetes deployment manifests
 - [ ] Helm charts
 - [ ] High availability setup
 - [ ] Load balancing support
+- [ ] Redis caching layer
 
 ---
 
@@ -100,12 +132,14 @@
 - [ ] Grafana dashboard templates
 - [ ] InfluxDB integration
 - [ ] Time-series data visualization
+- [ ] Custom alerting rules
 
 **Automation:**
 - [ ] Automated remediation actions
 - [ ] Workflow automation
 - [ ] Integration with Ansible
 - [ ] ChatOps integration
+- [ ] Webhook triggers
 
 **Enterprise:**
 - [ ] Multi-tenancy support
@@ -113,6 +147,8 @@
 - [ ] Audit logging
 - [ ] Compliance reporting
 - [ ] API rate limiting & quotas
+- [ ] SLA monitoring
+- [ ] Change management integration
 
 ---
 
@@ -123,13 +159,19 @@
 2. Jelaskan use case dan behavior yang diharapkan
 3. Komunitas akan vote dan diskusi
 
+**Popular Requests:**
+- Multi-vendor support (in progress for v4.2.0)
+- Web interface (planned for v5.0.0)
+- Alert system (planned for v4.3.0)
+
 ---
 
 ## 📊 Version Support Policy
 
 | Versi | Status | Akhir Dukungan | Update Keamanan |
 |-------|--------|---------------|------------------|
-| v4.0.x | ✅ Aktif | Q4 2026 | Ya |
+| v4.1.x | ✅ Aktif | Q4 2026 | Ya |
+| v4.0.x | ✅ Aktif | Q2 2026 | Ya |
 | v3.x | ⚠️ Legacy | Q2 2026 | Hanya Critical |
 | v2.x | ❌ EOL | Berakhir | Tidak |
 
@@ -149,4 +191,27 @@
 
 ---
 
-**BotLinkMaster v4.0** - Membangun masa depan monitoring jaringan 🚀
+## 📈 Progress Overview
+
+**v4.0.0 → v4.1.0:**
+- ✅ Service integration (Complete)
+- ✅ Access control (Complete)
+- ✅ Diagnostics (Complete)
+- ✅ Documentation (Complete)
+
+**v4.1.0 → v4.2.0:**
+- 🚧 Multi-vendor (In Planning)
+- 🚧 Bulk operations (In Planning)
+- 🚧 Performance (In Planning)
+
+**v4.2.0 → v4.3.0:**
+- 📋 Alerting (Planned)
+- 📋 Advanced monitoring (Planned)
+
+**v4.3.0 → v5.0.0:**
+- 🔮 Web interface (Future)
+- 🔮 API (Future)
+
+---
+
+**BotLinkMaster v4.1.0** - Production-ready service deployment! 🚀
