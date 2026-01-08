@@ -148,7 +148,7 @@ Perangkat jaringan yang akan dimonitor:
 * Clone repository
 ```bash
 git clone https://github.com/Iyankz/botlinkmaster.git
-cd ~/botlinkmaster/'Service & Installation (NEW v4.1.0!)'
+cd ~/botlinkmaster/
 ```
 * Run installer (akan meminta sudo otomatis)
 ```bash
