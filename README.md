@@ -134,6 +134,7 @@ Perangkat jaringan yang akan dimonitor harus:
 botlinkmaster/
 │
 ├── README.md                              # ⭐ Main documentation (root level!)
+├── LICENSE                                # MIT License
 │
 ├── 🐍 Core Python Modules
 │   ├── telegram_bot.py                    # Main Telegram bot
@@ -198,7 +199,6 @@ botlinkmaster/
 │
 ├── 📋 Meta Files
 │   ├── .gitignore                         # Git ignore rules
-│   ├── LICENSE                            # MIT License
 │   └── VERSION                            # 🆕 Version number (4.1.0)
 │
 └── 🗑️ Legacy/Backup
