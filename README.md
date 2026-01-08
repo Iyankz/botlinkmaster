@@ -152,7 +152,7 @@ cd ~/botlinkmaster/
 ```
 * Run installer (akan meminta sudo otomatis)
 ```bash
-chmod +x install-complete.sh
+sudo chmod +x install-complete.sh
 ./install-complete.sh
 ```
 
