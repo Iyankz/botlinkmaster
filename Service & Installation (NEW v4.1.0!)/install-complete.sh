@@ -171,7 +171,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 if [ -f "requirements.txt" ]; then
-    run_as_user "venv/bin/pip install -r requirements.txt -q"
+    run_as_user "venv/bin/pip install -r `/Configuration/requirements.txt -q"
     print_success "Python dependencies installed"
 else
     print_error "requirements.txt not found!"
