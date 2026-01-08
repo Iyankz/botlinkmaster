@@ -136,7 +136,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 run_as_user() {
-    su - "$ACTUAL_USER" -c "cd $INSTALL_DIR && $1"
+    su - "$ACTUAL_USER" -c "cd '$INSTALL_DIR' && $1"
 }
 
 PYTHON_VERSION=$(run_as_user "python3 --version 2>&1 | cut -d' ' -f2 | cut -d'.' -f1,2")
