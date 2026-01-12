@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.5 - Network Device Connection Module
-SSH/Telnet with multi-vendor support and Huawei SSH fix
+BotLinkMaster v4.5.1 - Network Device Connection Module
+SSH/Telnet with multi-vendor support and improved Huawei optical parsing
 
 Author: BotLinkMaster
-Version: 4.5
+Version: 4.5.1
 """
 
 import paramiko
@@ -83,7 +83,6 @@ class BotLinkMaster:
             transport.set_keepalive(30)
             
             # Enable legacy algorithms for older devices (Huawei, ZTE, etc.)
-            # This fixes "no matching host key type found. Their offer: ssh-rsa"
             transport._preferred_keys = [
                 'ssh-rsa', 'rsa-sha2-256', 'rsa-sha2-512',
                 'ssh-dss', 'ecdsa-sha2-nistp256', 'ssh-ed25519'
@@ -238,14 +237,16 @@ class BotLinkMaster:
             time.sleep(wait_time)
             
             output = ""
-            timeout = time.time() + 10
+            timeout = time.time() + 15  # 15 second timeout
             while time.time() < timeout:
                 if self.shell.recv_ready():
                     chunk = self.shell.recv(65535).decode('utf-8', errors='ignore')
                     output += chunk
                     time.sleep(0.3)
                 else:
-                    break
+                    if output:
+                        break
+                    time.sleep(0.5)
             
             return output
         except Exception as e:
@@ -270,7 +271,7 @@ class BotLinkMaster:
         cmd = self.vendor_config.show_interface_description
         output = self.execute_command(cmd, wait_time=3.0)
         
-        if not output or 'Invalid' in output:
+        if not output or 'Invalid' in output or 'Error' in output:
             cmd = self.vendor_config.show_interface_brief
             output = self.execute_command(cmd, wait_time=3.0)
         
@@ -281,14 +282,21 @@ class BotLinkMaster:
         lines = output.split('\n')
         for line in lines:
             line = line.strip()
-            if not line or 'Interface' in line or '---' in line:
+            if not line or '---' in line:
                 continue
             
+            # Skip header lines
+            lower_line = line.lower()
+            if any(h in lower_line for h in ['interface', 'port', 'status', 'protocol', '====', '----']):
+                if not any(c.isdigit() for c in line[:20]):
+                    continue
+            
             parts = line.split()
-            if len(parts) >= 2:
+            if len(parts) >= 1:
                 iface_name = parts[0]
-                # Skip header lines
-                if iface_name.lower() in ['interface', 'port', 'name']:
+                
+                # Skip if not interface-like
+                if not any(c.isdigit() for c in iface_name):
                     continue
                 
                 interface = {
@@ -297,16 +305,27 @@ class BotLinkMaster:
                     'description': '',
                 }
                 
-                # Try to determine status from line
+                # Determine status from line
                 line_lower = line.lower()
-                if 'up' in line_lower and 'down' not in line_lower:
+                if ' up ' in line_lower or line_lower.endswith(' up') or '*up' in line_lower:
+                    interface['status'] = 'up'
+                elif ' down ' in line_lower or line_lower.endswith(' down') or '*down' in line_lower:
+                    interface['status'] = 'down'
+                elif 'up' in line_lower and 'down' not in line_lower:
                     interface['status'] = 'up'
                 elif 'down' in line_lower:
                     interface['status'] = 'down'
                 
                 # Try to get description
                 if len(parts) >= 3:
-                    interface['description'] = ' '.join(parts[2:])
+                    # Find description - usually after status columns
+                    desc_start = 2
+                    for i, part in enumerate(parts):
+                        if part.lower() in ['up', 'down', '*up', '*down', 'up(s)', 'down(s)']:
+                            desc_start = i + 1
+                            break
+                    if desc_start < len(parts):
+                        interface['description'] = ' '.join(parts[desc_start:])
                 
                 interfaces.append(interface)
         
@@ -319,7 +338,7 @@ class BotLinkMaster:
         cmd = self.vendor_config.show_interface.format(interface=full_interface)
         output = self.execute_command(cmd, wait_time=3.0)
         
-        if not output or 'Invalid' in output:
+        if not output or 'Invalid' in output or 'Error' in output:
             cmd = self.vendor_config.show_interface.format(interface=interface_name)
             output = self.execute_command(cmd, wait_time=3.0)
         
@@ -333,33 +352,49 @@ class BotLinkMaster:
         return result
     
     def get_optical_power(self, interface_name: str) -> Dict[str, Any]:
-        """Get optical power for interface"""
+        """Get optical power for interface with multiple command attempts"""
         full_interface = expand_interface_name(interface_name)
         
+        # Get all possible optical commands
         commands = get_optical_commands(self.config.vendor, full_interface)
+        
+        # Also try with original interface name
+        if full_interface != interface_name:
+            commands.extend(get_optical_commands(self.config.vendor, interface_name))
         
         all_output = ""
         result = None
+        successful_cmd = None
         
         for cmd in commands:
             logger.info(f"Trying optical command: {cmd}")
             output = self.execute_command(cmd, wait_time=3.0)
             
-            if output and 'Invalid' not in output and 'Error' not in output and '%' not in output:
+            if output:
+                # Skip if error messages
+                if any(err in output for err in ['Invalid', 'Error', 'Unrecognized', '%']):
+                    continue
+                
                 all_output += f"\n--- {cmd} ---\n{output}\n"
                 parsed = self.optical_parser.parse_optical_power(output)
                 
                 if parsed['found']:
                     result = parsed
-                    result['command_used'] = cmd
+                    successful_cmd = cmd
+                    logger.info(f"Found optical data with command: {cmd}")
                     break
         
+        # If not found with vendor commands, try parsing all output
         if not result or not result.get('found'):
             result = self.optical_parser.parse_optical_power(all_output)
-            result['command_used'] = 'multiple'
+            if result.get('found'):
+                successful_cmd = 'combined'
+            else:
+                successful_cmd = 'multiple'
         
         result['interface'] = interface_name
         result['all_output'] = all_output
+        result['command_used'] = successful_cmd or 'none'
         
         return result
     
@@ -405,4 +440,4 @@ class BotLinkMaster:
 
 
 if __name__ == "__main__":
-    print("BotLinkMaster v4.5 - Network Device Connection Module")
+    print("BotLinkMaster v4.5.1 - Network Device Connection Module")

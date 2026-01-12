@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster - Vendor Commands v4.5
-Multi-vendor support with OLT/ONU optical power
+BotLinkMaster - Vendor Commands v4.5.1
+Multi-vendor support with improved Huawei optical parsing
 
 Author: BotLinkMaster
-Version: 4.5
+Version: 4.5.1
 """
 
 import re
@@ -74,13 +74,22 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         show_optical_all="show interface transceiver",
         show_optical_interface="show interface {interface} transceiver",
         show_optical_detail="show interface {interface} transceiver detail",
-        rx_power_patterns=[r"Receive\s+Power[:\s]+(-?\d+\.?\d*)\s*dBm", r"Rx\s+Power[:\s]+(-?\d+\.?\d*)"],
-        tx_power_patterns=[r"Transmit\s+Power[:\s]+(-?\d+\.?\d*)\s*dBm", r"Tx\s+Power[:\s]+(-?\d+\.?\d*)"],
+        rx_power_patterns=[
+            r"Receive\s+Power[:\s]+(-?\d+\.?\d*)\s*dBm",
+            r"Rx\s+Power[:\s]+(-?\d+\.?\d*)",
+            r"RX\s+power[:\s]+(-?\d+\.?\d*)",
+        ],
+        tx_power_patterns=[
+            r"Transmit\s+Power[:\s]+(-?\d+\.?\d*)\s*dBm",
+            r"Tx\s+Power[:\s]+(-?\d+\.?\d*)",
+            r"TX\s+power[:\s]+(-?\d+\.?\d*)",
+        ],
         status_up_patterns=[r"line protocol is up", r"is up"],
         status_down_patterns=[r"line protocol is down", r"is down", r"administratively down"],
         description_pattern=r"Description[:\s]+(.+?)(?:\n|$)",
         notes="Cisco IOS routers and switches",
     ),
+    
     Vendor.CISCO_NXOS.value: VendorConfig(
         name="Cisco NX-OS",
         disable_paging="terminal length 0",
@@ -98,6 +107,10 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         description_pattern=r"Description[:\s]+(.+?)(?:\n|$)",
         notes="Cisco Nexus switches",
     ),
+    
+    # ==========================================================================
+    # HUAWEI VRP - IMPROVED PATTERNS
+    # ==========================================================================
     Vendor.HUAWEI.value: VendorConfig(
         name="Huawei VRP",
         disable_paging="screen-length 0 temporary",
@@ -107,15 +120,53 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         show_interface_description="display interface description",
         show_optical_all="display transceiver",
         show_optical_interface="display transceiver interface {interface}",
-        show_optical_detail="display transceiver interface {interface} verbose",
-        alt_optical_commands=["display transceiver diagnosis interface {interface}"],
-        rx_power_patterns=[r"RX\s+Power\s*\(dBm\)[:\s]+(-?\d+\.?\d*)", r"Rx\s+Power[:\s]+(-?\d+\.?\d*)"],
-        tx_power_patterns=[r"TX\s+Power\s*\(dBm\)[:\s]+(-?\d+\.?\d*)", r"Tx\s+Power[:\s]+(-?\d+\.?\d*)"],
-        status_up_patterns=[r"current state[:\s]*UP", r"Physical[:\s]+UP"],
-        status_down_patterns=[r"current state[:\s]*DOWN", r"Physical[:\s]+DOWN"],
+        show_optical_detail="display transceiver diagnosis interface {interface}",
+        alt_optical_commands=[
+            "display transceiver interface {interface} verbose",
+            "display transceiver diagnosis interface {interface}",
+            "display interface {interface} transceiver",
+        ],
+        # Huawei formats:
+        # TX power(dBm)                         :-0.81
+        # RX power(dBm)                         :-6.35
+        # TxPower(dBm)|      -1.50 |      -1.60 |
+        # RxPower(dBm)|      -3.20 |      -3.15 |
+        # Current TX Power(dBm)     : -1.50
+        # Current RX Power(dBm)     : -8.23
+        rx_power_patterns=[
+            r"RX\s*power\s*\(dBm\)[:\s\|]+(-?\d+\.?\d*)",
+            r"RxPower\s*\(dBm\)\s*\|?\s*(-?\d+\.?\d*)",
+            r"Rx\s*Power\s*\(dBm\)[:\s]+(-?\d+\.?\d*)",
+            r"Current\s+RX\s+Power\s*\(dBm\)[:\s]+(-?\d+\.?\d*)",
+            r"Rx\s+optical\s+power[:\s]+(-?\d+\.?\d*)",
+            r"RX\s+Power[:\s]+(-?\d+\.?\d*)",
+            r"Rx[:\s]+(-?\d+\.?\d*)\s*dBm",
+        ],
+        tx_power_patterns=[
+            r"TX\s*power\s*\(dBm\)[:\s\|]+(-?\d+\.?\d*)",
+            r"TxPower\s*\(dBm\)\s*\|?\s*(-?\d+\.?\d*)",
+            r"Tx\s*Power\s*\(dBm\)[:\s]+(-?\d+\.?\d*)",
+            r"Current\s+TX\s+Power\s*\(dBm\)[:\s]+(-?\d+\.?\d*)",
+            r"Tx\s+optical\s+power[:\s]+(-?\d+\.?\d*)",
+            r"TX\s+Power[:\s]+(-?\d+\.?\d*)",
+            r"Tx[:\s]+(-?\d+\.?\d*)\s*dBm",
+        ],
+        status_up_patterns=[
+            r"current state[:\s]*UP",
+            r"Physical[:\s]+UP",
+            r"Line protocol current state[:\s]+UP",
+            r"is\s+UP",
+        ],
+        status_down_patterns=[
+            r"current state[:\s]*DOWN",
+            r"Physical[:\s]+DOWN",
+            r"Administratively\s+DOWN",
+            r"is\s+DOWN",
+        ],
         description_pattern=r"Description[:\s]+(.+?)(?:\n|$)",
-        notes="Huawei routers and switches",
+        notes="Huawei routers and switches - CE/S/AR series",
     ),
+    
     Vendor.HUAWEI_OLT.value: VendorConfig(
         name="Huawei OLT",
         disable_paging="scroll",
@@ -128,13 +179,25 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         show_optical_detail="display transceiver diagnosis interface {interface}",
         show_onu_optical="display ont optical-info {port} {onu_id}",
         show_onu_list="display ont info all",
-        alt_optical_commands=["display ont optical-info {port} all"],
-        rx_power_patterns=[r"Rx\s*optical\s*power[:\s]+(-?\d+\.?\d*)", r"OLT\s+Rx[:\s]+(-?\d+\.?\d*)"],
-        tx_power_patterns=[r"Tx\s*optical\s*power[:\s]+(-?\d+\.?\d*)", r"ONU\s+Tx[:\s]+(-?\d+\.?\d*)"],
+        alt_optical_commands=[
+            "display ont optical-info {port} all",
+            "display transceiver diagnosis interface {interface}",
+        ],
+        rx_power_patterns=[
+            r"Rx\s*optical\s*power[:\s]+(-?\d+\.?\d*)",
+            r"OLT\s+Rx[:\s]+(-?\d+\.?\d*)",
+            r"RX\s*power\s*\(dBm\)[:\s]+(-?\d+\.?\d*)",
+        ],
+        tx_power_patterns=[
+            r"Tx\s*optical\s*power[:\s]+(-?\d+\.?\d*)",
+            r"ONU\s+Tx[:\s]+(-?\d+\.?\d*)",
+            r"TX\s*power\s*\(dBm\)[:\s]+(-?\d+\.?\d*)",
+        ],
         status_up_patterns=[r"Run\s+state[:\s]*online", r"Status[:\s]*UP"],
         status_down_patterns=[r"Run\s+state[:\s]*offline", r"Status[:\s]*DOWN"],
         notes="Huawei OLT MA5600/MA5800",
     ),
+    
     Vendor.ZTE.value: VendorConfig(
         name="ZTE",
         disable_paging="terminal length 0",
@@ -145,13 +208,14 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         show_optical_all="show transceiver detail",
         show_optical_interface="show transceiver interface {interface}",
         show_optical_detail="show transceiver interface {interface} detail",
-        rx_power_patterns=[r"Rx\s+Power[:\s]+(-?\d+\.?\d*)"],
-        tx_power_patterns=[r"Tx\s+Power[:\s]+(-?\d+\.?\d*)"],
+        rx_power_patterns=[r"Rx\s+Power[:\s]+(-?\d+\.?\d*)", r"RX[:\s]+(-?\d+\.?\d*)"],
+        tx_power_patterns=[r"Tx\s+Power[:\s]+(-?\d+\.?\d*)", r"TX[:\s]+(-?\d+\.?\d*)"],
         status_up_patterns=[r"line protocol is up"],
         status_down_patterns=[r"line protocol is down"],
         description_pattern=r"Description[:\s]+(.+?)(?:\n|$)",
         notes="ZTE routers and switches",
     ),
+    
     Vendor.ZTE_OLT.value: VendorConfig(
         name="ZTE OLT",
         disable_paging="terminal length 0",
@@ -185,6 +249,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         status_down_patterns=[r"Phase[:\s]*offline", r"State[:\s]*down"],
         notes="ZTE OLT C300/C600. Format ONU: gpon-onu_1/2/1:10",
     ),
+    
     Vendor.JUNIPER.value: VendorConfig(
         name="Juniper JunOS",
         disable_paging="set cli screen-length 0",
@@ -195,13 +260,20 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         show_optical_all="show interfaces diagnostics optics",
         show_optical_interface="show interfaces diagnostics optics {interface}",
         show_optical_detail="show interfaces {interface} extensive",
-        rx_power_patterns=[r"Laser\s+rx\s+power[:\s]+(-?\d+\.?\d*)\s*dBm"],
-        tx_power_patterns=[r"Laser\s+output\s+power[:\s]+(-?\d+\.?\d*)\s*dBm"],
+        rx_power_patterns=[
+            r"Laser\s+rx\s+power[:\s]+(-?\d+\.?\d*)\s*dBm",
+            r"Receiver\s+signal\s+average\s+optical\s+power[:\s]+(-?\d+\.?\d*)",
+        ],
+        tx_power_patterns=[
+            r"Laser\s+output\s+power[:\s]+(-?\d+\.?\d*)\s*dBm",
+            r"Module\s+transmit\s+power[:\s]+(-?\d+\.?\d*)",
+        ],
         status_up_patterns=[r"Physical link is Up"],
         status_down_patterns=[r"Physical link is Down"],
         description_pattern=r"Description[:\s]+(.+?)(?:\n|$)",
         notes="Juniper routers and switches",
     ),
+    
     Vendor.MIKROTIK.value: VendorConfig(
         name="MikroTik RouterOS",
         disable_paging="",
@@ -213,13 +285,14 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         show_optical_interface="/interface ethernet monitor {interface} once",
         show_optical_detail="/interface ethernet monitor {interface} once",
         alt_optical_commands=["/interface sfp-sfpplus monitor {interface} once"],
-        rx_power_patterns=[r"sfp-rx-power[:\s]+(-?\d+\.?\d*)"],
-        tx_power_patterns=[r"sfp-tx-power[:\s]+(-?\d+\.?\d*)"],
+        rx_power_patterns=[r"sfp-rx-power[:\s]+(-?\d+\.?\d*)", r"rx-power[:\s]+(-?\d+\.?\d*)"],
+        tx_power_patterns=[r"sfp-tx-power[:\s]+(-?\d+\.?\d*)", r"tx-power[:\s]+(-?\d+\.?\d*)"],
         status_up_patterns=[r"status[:\s]+link-ok", r"running[:\s]+yes"],
         status_down_patterns=[r"status[:\s]+no-link", r"running[:\s]+no"],
         description_pattern=r"comment[:\s]+(.+?)(?:\n|$)",
         notes="MikroTik RouterOS",
     ),
+    
     Vendor.NOKIA.value: VendorConfig(
         name="Nokia SR-OS",
         disable_paging="environment no more",
@@ -237,6 +310,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         description_pattern=r"Description[:\s]+(.+?)(?:\n|$)",
         notes="Nokia SR-OS routers",
     ),
+    
     Vendor.HP_ARUBA.value: VendorConfig(
         name="HP/Aruba Switch",
         disable_paging="no page",
@@ -254,6 +328,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         description_pattern=r"Name[:\s]+(.+?)(?:\n|$)",
         notes="HP ProCurve and Aruba switches",
     ),
+    
     Vendor.FIBERHOME.value: VendorConfig(
         name="FiberHome",
         disable_paging="terminal length 0",
@@ -271,6 +346,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         description_pattern=r"Description[:\s]+(.+?)(?:\n|$)",
         notes="FiberHome switches",
     ),
+    
     Vendor.FIBERHOME_OLT.value: VendorConfig(
         name="FiberHome OLT",
         disable_paging="terminal length 0",
@@ -289,6 +365,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         status_down_patterns=[r"Status[:\s]+offline"],
         notes="FiberHome OLT",
     ),
+    
     Vendor.DCN.value: VendorConfig(
         name="DCN",
         disable_paging="terminal length 0",
@@ -306,6 +383,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         description_pattern=r"Description[:\s]+(.+?)(?:\n|$)",
         notes="DCN switches",
     ),
+    
     Vendor.H3C.value: VendorConfig(
         name="H3C Comware",
         disable_paging="screen-length disable",
@@ -316,13 +394,20 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         show_optical_all="display transceiver",
         show_optical_interface="display transceiver interface {interface}",
         show_optical_detail="display transceiver interface {interface} verbose",
-        rx_power_patterns=[r"RX\s+Power[:\s]+(-?\d+\.?\d*)"],
-        tx_power_patterns=[r"TX\s+Power[:\s]+(-?\d+\.?\d*)"],
+        rx_power_patterns=[
+            r"RX\s+Power[:\s]+(-?\d+\.?\d*)",
+            r"Rx\s*power\s*\(dBm\)[:\s]+(-?\d+\.?\d*)",
+        ],
+        tx_power_patterns=[
+            r"TX\s+Power[:\s]+(-?\d+\.?\d*)",
+            r"Tx\s*power\s*\(dBm\)[:\s]+(-?\d+\.?\d*)",
+        ],
         status_up_patterns=[r"current state[:\s]+UP"],
         status_down_patterns=[r"current state[:\s]+DOWN"],
         description_pattern=r"Description[:\s]+(.+?)(?:\n|$)",
         notes="H3C Comware switches",
     ),
+    
     Vendor.RUIJIE.value: VendorConfig(
         name="Ruijie",
         disable_paging="terminal length 0",
@@ -340,6 +425,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         description_pattern=r"Description[:\s]+(.+?)(?:\n|$)",
         notes="Ruijie switches",
     ),
+    
     Vendor.BDCOM.value: VendorConfig(
         name="BDCOM",
         disable_paging="terminal length 0",
@@ -357,6 +443,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         description_pattern=r"Description[:\s]+(.+?)(?:\n|$)",
         notes="BDCOM switches",
     ),
+    
     Vendor.BDCOM_OLT.value: VendorConfig(
         name="BDCOM OLT",
         disable_paging="terminal length 0",
@@ -375,6 +462,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         status_down_patterns=[r"Status[:\s]+offline"],
         notes="BDCOM OLT EPON/GPON",
     ),
+    
     Vendor.RAISECOM.value: VendorConfig(
         name="Raisecom",
         disable_paging="terminal length 0",
@@ -392,6 +480,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         description_pattern=r"Description[:\s]+(.+?)(?:\n|$)",
         notes="Raisecom equipment",
     ),
+    
     Vendor.FS.value: VendorConfig(
         name="FS.COM",
         disable_paging="terminal length 0",
@@ -409,6 +498,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         description_pattern=r"Description[:\s]+(.+?)(?:\n|$)",
         notes="FS.COM switches",
     ),
+    
     Vendor.ALLIED.value: VendorConfig(
         name="Allied Telesis",
         disable_paging="terminal length 0",
@@ -426,6 +516,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         description_pattern=r"Description[:\s]+(.+?)(?:\n|$)",
         notes="Allied Telesis switches",
     ),
+    
     Vendor.DATACOM.value: VendorConfig(
         name="Datacom",
         disable_paging="terminal length 0",
@@ -443,6 +534,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         description_pattern=r"Description[:\s]+(.+?)(?:\n|$)",
         notes="Datacom switches",
     ),
+    
     Vendor.VSOL_OLT.value: VendorConfig(
         name="VSOL OLT",
         disable_paging="terminal length 0",
@@ -461,6 +553,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         status_down_patterns=[r"Status[:\s]+offline"],
         notes="VSOL OLT",
     ),
+    
     Vendor.GENERIC.value: VendorConfig(
         name="Generic",
         disable_paging="terminal length 0",
@@ -471,12 +564,21 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         show_optical_all="show transceiver",
         show_optical_interface="show transceiver interface {interface}",
         show_optical_detail="show transceiver interface {interface}",
-        alt_optical_commands=["display transceiver interface {interface}"],
+        alt_optical_commands=[
+            "display transceiver interface {interface}",
+            "display transceiver diagnosis interface {interface}",
+        ],
         alt_interface_commands=["display interface {interface}"],
-        rx_power_patterns=[r"(?:Rx|RX|Receive)\s*(?:Power|power)[:\s]+(-?\d+\.?\d*)"],
-        tx_power_patterns=[r"(?:Tx|TX|Transmit)\s*(?:Power|power)[:\s]+(-?\d+\.?\d*)"],
-        status_up_patterns=[r"(?:line protocol|status|state|link)\s+(?:is\s+)?up"],
-        status_down_patterns=[r"(?:line protocol|status|state|link)\s+(?:is\s+)?down"],
+        rx_power_patterns=[
+            r"(?:Rx|RX|Receive)\s*(?:Power|power)[:\s\|]+(-?\d+\.?\d*)",
+            r"RxPower\s*\(dBm\)\s*\|?\s*(-?\d+\.?\d*)",
+        ],
+        tx_power_patterns=[
+            r"(?:Tx|TX|Transmit)\s*(?:Power|power)[:\s\|]+(-?\d+\.?\d*)",
+            r"TxPower\s*\(dBm\)\s*\|?\s*(-?\d+\.?\d*)",
+        ],
+        status_up_patterns=[r"(?:line protocol|status|state|link)\s+(?:is\s+)?up", r"is\s+UP"],
+        status_down_patterns=[r"(?:line protocol|status|state|link)\s+(?:is\s+)?down", r"is\s+DOWN"],
         description_pattern=r"[Dd]escription[:\s]+(.+?)(?:\n|$)",
         notes="Generic fallback",
     ),
@@ -526,50 +628,64 @@ class OpticalParser:
         if not output:
             return result
         
+        # Try all RX patterns
         for pattern in self.config.rx_power_patterns:
             match = re.search(pattern, output, re.IGNORECASE | re.MULTILINE)
             if match:
                 try:
                     result['rx_power'] = float(match.group(1))
-                    result['rx_power_dbm'] = f"{result['rx_power']:.3f} dBm"
+                    result['rx_power_dbm'] = f"{result['rx_power']:.2f} dBm"
                     result['found'] = True
                     break
                 except:
                     continue
         
+        # Try all TX patterns
         for pattern in self.config.tx_power_patterns:
             match = re.search(pattern, output, re.IGNORECASE | re.MULTILINE)
             if match:
                 try:
                     result['tx_power'] = float(match.group(1))
-                    result['tx_power_dbm'] = f"{result['tx_power']:.3f} dBm"
+                    result['tx_power_dbm'] = f"{result['tx_power']:.2f} dBm"
                     result['found'] = True
                     break
                 except:
                     continue
         
+        # Try attenuation patterns
         for pattern in self.config.attenuation_patterns:
             match = re.search(pattern, output, re.IGNORECASE | re.MULTILINE)
             if match:
                 try:
                     result['attenuation'] = float(match.group(1))
-                    result['attenuation_db'] = f"{result['attenuation']:.3f} dB"
+                    result['attenuation_db'] = f"{result['attenuation']:.2f} dB"
                     break
                 except:
                     continue
         
+        # Fallback: find any dBm values if not found
         if not result['found']:
-            dbm_matches = re.findall(r'(-?\d+\.?\d*)\s*\(?dBm', output, re.IGNORECASE)
+            # Pattern untuk format: -1.50 dBm atau -3.20dBm
+            dbm_matches = re.findall(r'(-?\d+\.?\d*)\s*dBm', output, re.IGNORECASE)
             if len(dbm_matches) >= 2:
                 try:
                     result['tx_power'] = float(dbm_matches[0])
                     result['rx_power'] = float(dbm_matches[1])
-                    result['tx_power_dbm'] = f"{result['tx_power']:.3f} dBm"
-                    result['rx_power_dbm'] = f"{result['rx_power']:.3f} dBm"
+                    result['tx_power_dbm'] = f"{result['tx_power']:.2f} dBm"
+                    result['rx_power_dbm'] = f"{result['rx_power']:.2f} dBm"
+                    result['found'] = True
+                except:
+                    pass
+            elif len(dbm_matches) == 1:
+                # Single value - assume RX
+                try:
+                    result['rx_power'] = float(dbm_matches[0])
+                    result['rx_power_dbm'] = f"{result['rx_power']:.2f} dBm"
                     result['found'] = True
                 except:
                     pass
         
+        # Signal status based on RX power
         if result['rx_power'] is not None:
             rx = result['rx_power']
             if rx >= -8:
@@ -610,6 +726,7 @@ INTERFACE_ALIASES = {
     'fa': 'FastEthernet', 'te': 'TenGigabitEthernet',
     'eth': 'Ethernet', 'ge': 'GigabitEthernet',
     'xge': 'XGigabitEthernet', '10ge': '10GE',
+    '25ge': '25GE', '40ge': '40GE', '100ge': '100GE',
 }
 
 

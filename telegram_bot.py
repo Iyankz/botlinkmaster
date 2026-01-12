@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.5 - Telegram Bot
+BotLinkMaster v4.5.1 - Telegram Bot
 Network device monitoring with multi-vendor optical power support
 
-Features:
-- Multi-vendor support (22+ vendors)
-- OLT/ONU optical power monitoring
-- Timezone configuration (IANA)
-- Multiple chat ID and group support
-- Interface listing with status and description
+Fixes:
+- Help command formatting
+- Interface pagination
+- Huawei optical parsing
 
 Author: BotLinkMaster
-Version: 4.5
+Version: 4.5.1
 """
 
 import os
@@ -39,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 db = DatabaseManager()
 
-# Load allowed chat IDs from env (supports multiple IDs and groups)
+# Load allowed chat IDs from env
 ALLOWED_CHAT_IDS = []
 env_ids = os.getenv('ALLOWED_CHAT_IDS', '')
 if env_ids:
@@ -53,19 +51,12 @@ if env_ids:
 
 
 def is_authorized(chat_id: int) -> bool:
-    """Check if chat ID is authorized (user or group)"""
-    # If no restrictions, allow all
     if not ALLOWED_CHAT_IDS and not db.get_allowed_users():
         return True
-    
-    # Check env-based allowed IDs
     if chat_id in ALLOWED_CHAT_IDS:
         return True
-    
-    # Check database-based allowed users
     if db.is_user_allowed(chat_id):
         return True
-    
     return False
 
 
@@ -74,7 +65,7 @@ async def check_auth(update: Update) -> bool:
     if not is_authorized(chat_id):
         chat_type = update.effective_chat.type
         await update.message.reply_text(
-            f"Access Denied\n\n"
+            f"⛔ Access Denied\n\n"
             f"Chat ID: {chat_id}\n"
             f"Type: {chat_type}\n\n"
             f"Hubungi admin untuk mendapatkan akses.\n"
@@ -95,12 +86,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     current_time = tz_manager.get_current_time()
     
     await update.message.reply_text(
-        f"BotLinkMaster v4.5.0\n"
-        f"{'='*30}\n\n"
+        f"🤖 BotLinkMaster v4.5.1\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"Bot monitoring perangkat jaringan.\n"
         f"Support 22+ vendor dengan optical power.\n\n"
-        f"Waktu: {current_time}\n"
-        f"Timezone: {tz_manager.get_timezone()}\n\n"
+        f"⏰ Waktu: {current_time}\n"
+        f"🌍 Timezone: {tz_manager.get_timezone()}\n\n"
         f"Ketik /help untuk bantuan lengkap."
     )
 
@@ -109,59 +100,72 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_auth(update):
         return
     
-    await update.message.reply_text(
-        "BANTUAN BOTLINKMASTER v4.5\n"
-        "="*30 + "\n\n"
-        "PERINTAH TERSEDIA:\n\n"
-        "INFO & BANTUAN:\n"
-        "/start - Tampilkan info bot\n"
-        "/help - Tampilkan bantuan ini\n"
-        "/myid - Tampilkan Chat ID Anda\n"
-        "/time - Tampilkan waktu saat ini\n\n"
-        "DEVICE MANAGEMENT:\n"
-        "/add - Tambah perangkat baru\n"
-        "/list - Daftar semua perangkat\n"
-        "/device [nama] - Detail perangkat\n"
-        "/delete [nama] - Hapus perangkat\n\n"
-        "MONITORING:\n"
-        "/cek [device] [interface] - Cek status\n"
-        "/interfaces [device] - List interface\n"
-        "/redaman [device] [interface] - Cek optical\n\n"
-        "KONFIGURASI:\n"
-        "/vendors - Daftar vendor\n"
-        "/timezone - Info timezone\n"
-        "/settz [timezone] - Set timezone\n\n"
-        "Ketik /help2 untuk contoh penggunaan."
-    )
+    help_text = """🔧 BANTUAN BOTLINKMASTER v4.5.1
+
+📋 INFO & BANTUAN:
+/start - Tampilkan info bot
+/help - Tampilkan bantuan ini
+/help2 - Contoh penggunaan
+/myid - Tampilkan Chat ID Anda
+/time - Tampilkan waktu saat ini
+
+📦 DEVICE MANAGEMENT:
+/add - Tambah perangkat baru
+/list - Daftar semua perangkat
+/device [nama] - Detail perangkat
+/delete [nama] - Hapus perangkat
+
+📡 MONITORING:
+/cek [device] [interface] - Cek status
+/interfaces [device] - List interface
+/interfaces [device] [page] - Halaman
+/redaman [device] [interface] - Cek optical
+
+⚙️ KONFIGURASI:
+/vendors - Daftar vendor
+/timezone - Info timezone
+/settz [timezone] - Set timezone"""
+    
+    await update.message.reply_text(help_text)
 
 
 async def help2_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_auth(update):
         return
     
-    await update.message.reply_text(
-        "CONTOH PENGGUNAAN:\n"
-        "="*30 + "\n\n"
-        "1. TAMBAH PERANGKAT:\n"
-        "/add\n"
-        "nama: router-core\n"
-        "host: 192.168.1.1\n"
-        "username: admin\n"
-        "password: admin123\n"
-        "protocol: ssh\n"
-        "port: 22\n"
-        "vendor: cisco_ios\n\n"
-        "2. CEK INTERFACE:\n"
-        "/cek router-core Gi0/0\n\n"
-        "3. CEK REDAMAN:\n"
-        "/redaman router-core Gi0/0\n\n"
-        "4. CEK ONU (ZTE OLT):\n"
-        "/redaman olt-zte gpon-onu_1/2/1:10\n\n"
-        "5. LIST INTERFACE:\n"
-        "/interfaces router-core\n\n"
-        "6. SET TIMEZONE:\n"
-        "/settz Asia/Jakarta"
-    )
+    help2_text = """📖 CONTOH PENGGUNAAN
+
+1️⃣ TAMBAH PERANGKAT:
+/add
+nama: router-core
+host: 192.168.1.1
+username: admin
+password: admin123
+protocol: ssh
+port: 22
+vendor: cisco_ios
+
+2️⃣ CEK INTERFACE:
+/cek router-core Gi0/0
+
+3️⃣ CEK REDAMAN:
+/redaman router-core Gi0/0
+
+4️⃣ CEK ONU (ZTE OLT):
+/redaman olt-zte gpon-onu_1/2/1:10
+
+5️⃣ LIST INTERFACE:
+/interfaces router-core
+/interfaces router-core 2
+
+6️⃣ SET TIMEZONE:
+/settz Asia/Jakarta
+
+7️⃣ VENDOR OLT:
+huawei_olt, zte_olt, bdcom_olt
+fiberhome_olt, vsol_olt"""
+    
+    await update.message.reply_text(help2_text)
 
 
 async def myid_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -171,12 +175,12 @@ async def myid_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     first_name = update.effective_user.first_name or "N/A"
     
     await update.message.reply_text(
-        f"INFO CHAT\n"
-        f"{'='*30}\n\n"
-        f"Chat ID: {chat_id}\n"
-        f"Type: {chat_type}\n"
-        f"Username: @{username}\n"
-        f"Name: {first_name}\n\n"
+        f"📋 INFO CHAT\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"🆔 Chat ID: {chat_id}\n"
+        f"📱 Type: {chat_type}\n"
+        f"👤 Username: @{username}\n"
+        f"📛 Name: {first_name}\n\n"
         f"Untuk akses bot, tambahkan Chat ID\n"
         f"ke ALLOWED_CHAT_IDS di file .env\n\n"
         f"Contoh:\n"
@@ -194,10 +198,10 @@ async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     timezone = tz_manager.get_timezone()
     
     await update.message.reply_text(
-        f"WAKTU SAAT INI\n"
-        f"{'='*30}\n\n"
-        f"Waktu: {current_time}\n"
-        f"Timezone: {timezone}\n\n"
+        f"⏰ WAKTU SAAT INI\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"🕐 Waktu: {current_time}\n"
+        f"🌍 Timezone: {timezone}\n\n"
         f"Gunakan /settz untuk mengubah timezone"
     )
 
@@ -221,7 +225,7 @@ async def settz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if not context.args:
         await update.message.reply_text(
-            "SET TIMEZONE\n\n"
+            "⚙️ SET TIMEZONE\n\n"
             "Gunakan: /settz [timezone]\n\n"
             "Contoh:\n"
             "/settz Asia/Jakarta\n"
@@ -235,7 +239,7 @@ async def settz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if not validate_timezone(new_tz):
         await update.message.reply_text(
-            f"Timezone '{new_tz}' tidak valid.\n\n"
+            f"❌ Timezone '{new_tz}' tidak valid.\n\n"
             f"Format: Continent/City\n"
             f"Contoh: Asia/Jakarta\n\n"
             f"Ketik /timezone untuk daftar"
@@ -245,51 +249,47 @@ async def settz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if tz_manager.save_timezone(new_tz):
         current_time = get_current_time(new_tz)
         await update.message.reply_text(
-            f"Timezone berhasil diubah!\n\n"
-            f"Timezone: {new_tz}\n"
-            f"Waktu sekarang: {current_time}"
+            f"✅ Timezone berhasil diubah!\n\n"
+            f"🌍 Timezone: {new_tz}\n"
+            f"⏰ Waktu sekarang: {current_time}"
         )
     else:
-        await update.message.reply_text("Gagal menyimpan timezone")
+        await update.message.reply_text("❌ Gagal menyimpan timezone")
 
 
 async def vendors_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_auth(update):
         return
     
-    vendors_info = [
-        ("cisco_ios", "Cisco IOS/IOS-XE"),
-        ("cisco_nxos", "Cisco NX-OS"),
-        ("huawei", "Huawei VRP"),
-        ("huawei_olt", "Huawei OLT"),
-        ("zte", "ZTE Switch"),
-        ("zte_olt", "ZTE OLT"),
-        ("juniper", "Juniper JunOS"),
-        ("mikrotik", "MikroTik"),
-        ("nokia", "Nokia SR-OS"),
-        ("hp_aruba", "HP/Aruba"),
-        ("fiberhome", "FiberHome"),
-        ("fiberhome_olt", "FiberHome OLT"),
-        ("dcn", "DCN"),
-        ("h3c", "H3C Comware"),
-        ("ruijie", "Ruijie"),
-        ("bdcom", "BDCOM Switch"),
-        ("bdcom_olt", "BDCOM OLT"),
-        ("raisecom", "Raisecom"),
-        ("fs", "FS.COM"),
-        ("allied", "Allied Telesis"),
-        ("datacom", "Datacom"),
-        ("vsol_olt", "VSOL OLT"),
-    ]
-    
-    msg = "VENDOR YANG DIDUKUNG\n"
-    msg += "="*30 + "\n\n"
-    
-    for vendor_key, name in vendors_info:
-        msg += f"- {vendor_key}: {name}\n"
-    
-    msg += "\nGunakan nilai vendor saat /add\n"
-    msg += "Contoh: vendor: zte_olt"
+    msg = """📦 VENDOR YANG DIDUKUNG
+
+🔹 ROUTER & SWITCH:
+cisco_ios - Cisco IOS/IOS-XE
+cisco_nxos - Cisco NX-OS
+huawei - Huawei VRP
+zte - ZTE Switch
+juniper - Juniper JunOS
+mikrotik - MikroTik
+nokia - Nokia SR-OS
+hp_aruba - HP/Aruba
+h3c - H3C Comware
+ruijie - Ruijie
+dcn - DCN
+bdcom - BDCOM
+raisecom - Raisecom
+fs - FS.COM
+allied - Allied Telesis
+datacom - Datacom
+
+🔹 OLT:
+huawei_olt - Huawei OLT
+zte_olt - ZTE OLT
+fiberhome_olt - FiberHome OLT
+bdcom_olt - BDCOM OLT
+vsol_olt - VSOL OLT
+
+Gunakan nilai vendor saat /add
+Contoh: vendor: huawei"""
     
     await update.message.reply_text(msg)
 
@@ -300,22 +300,23 @@ async def list_devices(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     devices = db.get_all_devices()
     if not devices:
-        await update.message.reply_text("Belum ada perangkat.\nGunakan /add untuk menambah.")
+        await update.message.reply_text("📭 Belum ada perangkat.\nGunakan /add untuk menambah.")
         return
     
-    msg = "DAFTAR PERANGKAT\n"
-    msg += "="*30 + "\n\n"
+    msg = "📦 DAFTAR PERANGKAT\n"
+    msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
     
     for d in devices:
-        msg += f"[{d.name}]\n"
-        msg += f"  Host: {d.host}:{d.port or (22 if d.protocol=='ssh' else 23)}\n"
-        msg += f"  Protocol: {d.protocol.upper()}\n"
-        msg += f"  Vendor: {d.vendor or 'generic'}\n"
+        port = d.port or (22 if d.protocol == 'ssh' else 23)
+        msg += f"🔹 {d.name}\n"
+        msg += f"   Host: {d.host}:{port}\n"
+        msg += f"   Protocol: {d.protocol.upper()}\n"
+        msg += f"   Vendor: {d.vendor or 'generic'}\n"
         if d.description:
-            msg += f"  Desc: {d.description}\n"
+            msg += f"   Desc: {d.description}\n"
         msg += "\n"
     
-    msg += f"Total: {len(devices)} perangkat"
+    msg += f"📊 Total: {len(devices)} perangkat"
     await update.message.reply_text(msg)
 
 
@@ -328,8 +329,8 @@ async def add_device_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     if not lines:
         await update.message.reply_text(
-            "TAMBAH PERANGKAT\n"
-            "="*30 + "\n\n"
+            "➕ TAMBAH PERANGKAT\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "Format:\n"
             "/add\n"
             "nama: router-1\n"
@@ -340,9 +341,9 @@ async def add_device_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             "port: 22\n"
             "vendor: cisco_ios\n"
             "description: Router utama\n\n"
-            "Field wajib: nama, host, username, password\n\n"
-            "Protocol: ssh (default) atau telnet\n"
-            "Port: 22 (ssh) atau 23 (telnet) atau custom\n\n"
+            "📌 Field wajib: nama, host, username, password\n\n"
+            "📌 Protocol: ssh (default) atau telnet\n"
+            "📌 Port: 22 (ssh) atau 23 (telnet) atau custom\n\n"
             "Ketik /vendors untuk daftar vendor"
         )
         return
@@ -357,12 +358,12 @@ async def add_device_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     required = ['nama', 'host', 'username', 'password']
     missing = [f for f in required if f not in data]
     if missing:
-        await update.message.reply_text(f"Field belum lengkap: {', '.join(missing)}")
+        await update.message.reply_text(f"❌ Field belum lengkap: {', '.join(missing)}")
         return
     
     protocol = data.get('protocol', 'ssh').lower()
     if protocol not in ['ssh', 'telnet']:
-        await update.message.reply_text("Protocol harus 'ssh' atau 'telnet'")
+        await update.message.reply_text("❌ Protocol harus 'ssh' atau 'telnet'")
         return
     
     port = data.get('port')
@@ -370,7 +371,7 @@ async def add_device_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         try:
             port = int(port)
         except ValueError:
-            await update.message.reply_text("Port harus angka")
+            await update.message.reply_text("❌ Port harus angka")
             return
     else:
         port = 22 if protocol == 'ssh' else 23
@@ -391,14 +392,14 @@ async def add_device_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     if device:
         await update.message.reply_text(
-            f"Perangkat ditambahkan!\n\n"
-            f"Nama: {device.name}\n"
-            f"Host: {device.host}:{device.port}\n"
-            f"Protocol: {device.protocol.upper()}\n"
-            f"Vendor: {vendor}"
+            f"✅ Perangkat ditambahkan!\n\n"
+            f"📛 Nama: {device.name}\n"
+            f"🌐 Host: {device.host}:{device.port}\n"
+            f"🔌 Protocol: {device.protocol.upper()}\n"
+            f"📦 Vendor: {vendor}"
         )
     else:
-        await update.message.reply_text("Gagal menambah.\nNama mungkin sudah ada.")
+        await update.message.reply_text("❌ Gagal menambah.\nNama mungkin sudah ada.")
 
 
 async def device_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -413,23 +414,23 @@ async def device_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     device = db.get_device(device_name)
     
     if not device:
-        await update.message.reply_text(f"Perangkat '{device_name}' tidak ditemukan")
+        await update.message.reply_text(f"❌ Perangkat '{device_name}' tidak ditemukan")
         return
     
     vendor_cfg = get_vendor_config(device.vendor or 'generic')
     
-    msg = f"INFO PERANGKAT\n"
-    msg += "="*30 + "\n\n"
-    msg += f"Nama: {device.name}\n"
-    msg += f"Host: {device.host}:{device.port}\n"
-    msg += f"Protocol: {device.protocol.upper()}\n"
-    msg += f"Vendor: {device.vendor} ({vendor_cfg.name})\n"
+    msg = f"📦 INFO PERANGKAT\n"
+    msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    msg += f"📛 Nama: {device.name}\n"
+    msg += f"🌐 Host: {device.host}:{device.port}\n"
+    msg += f"🔌 Protocol: {device.protocol.upper()}\n"
+    msg += f"📦 Vendor: {device.vendor} ({vendor_cfg.name})\n"
     if device.description:
-        msg += f"Deskripsi: {device.description}\n"
+        msg += f"📝 Deskripsi: {device.description}\n"
     if device.location:
-        msg += f"Lokasi: {device.location}\n"
+        msg += f"📍 Lokasi: {device.location}\n"
     
-    msg += f"\nOptical Cmd: {vendor_cfg.show_optical_interface}"
+    msg += f"\n🔍 Optical Cmd:\n{vendor_cfg.show_optical_interface}"
     
     await update.message.reply_text(msg)
 
@@ -445,33 +446,47 @@ async def delete_device(update: Update, context: ContextTypes.DEFAULT_TYPE):
     device_name = ' '.join(context.args)
     
     if db.delete_device(device_name):
-        await update.message.reply_text(f"Perangkat '{device_name}' dihapus")
+        await update.message.reply_text(f"✅ Perangkat '{device_name}' dihapus")
     else:
-        await update.message.reply_text(f"Perangkat '{device_name}' tidak ditemukan")
+        await update.message.reply_text(f"❌ Perangkat '{device_name}' tidak ditemukan")
 
 
 async def list_interfaces(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """List all interfaces on a device"""
+    """List all interfaces with pagination"""
     if not await check_auth(update):
         return
     
     if not context.args:
         await update.message.reply_text(
-            "LIST INTERFACE\n\n"
-            "Gunakan: /interfaces [device]\n\n"
-            "Contoh: /interfaces router-1"
+            "📡 LIST INTERFACE\n\n"
+            "Gunakan: /interfaces [device]\n"
+            "Atau: /interfaces [device] [page]\n\n"
+            "Contoh:\n"
+            "/interfaces router-1\n"
+            "/interfaces router-1 2"
         )
         return
     
     device_name = context.args[0]
+    page = 1
+    
+    # Check if page number provided
+    if len(context.args) >= 2:
+        try:
+            page = int(context.args[1])
+            if page < 1:
+                page = 1
+        except ValueError:
+            page = 1
+    
     device = db.get_device(device_name)
     
     if not device:
-        await update.message.reply_text(f"Perangkat '{device_name}' tidak ditemukan")
+        await update.message.reply_text(f"❌ Perangkat '{device_name}' tidak ditemukan")
         return
     
     checking_msg = await update.message.reply_text(
-        f"Mengambil daftar interface dari {device_name}..."
+        f"⏳ Mengambil daftar interface dari {device_name}..."
     )
     
     try:
@@ -486,37 +501,65 @@ async def list_interfaces(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         with BotLinkMaster(config) as bot:
             if not bot.connected:
-                await checking_msg.edit_text(f"Gagal koneksi ke {device_name}")
+                await checking_msg.edit_text(f"❌ Gagal koneksi ke {device_name}")
                 return
             
             interfaces = bot.get_interfaces()
             
             if not interfaces:
                 await checking_msg.edit_text(
-                    f"Tidak dapat mengambil daftar interface.\n"
+                    f"❌ Tidak dapat mengambil daftar interface.\n"
                     f"Coba gunakan /cek untuk interface spesifik."
                 )
                 return
             
-            msg = f"INTERFACE {device_name}\n"
-            msg += "="*30 + "\n\n"
+            # Pagination settings
+            per_page = 20
+            total_interfaces = len(interfaces)
+            total_pages = (total_interfaces + per_page - 1) // per_page
             
-            for iface in interfaces[:30]:  # Limit 30
-                status_icon = "[UP]" if iface['status'] == 'up' else "[DOWN]" if iface['status'] == 'down' else "[?]"
-                msg += f"{status_icon} {iface['name']}\n"
+            if page > total_pages:
+                page = total_pages
+            
+            start_idx = (page - 1) * per_page
+            end_idx = min(start_idx + per_page, total_interfaces)
+            
+            # Count UP/DOWN
+            up_count = sum(1 for i in interfaces if i['status'] == 'up')
+            down_count = sum(1 for i in interfaces if i['status'] == 'down')
+            
+            msg = f"📡 INTERFACE {device_name}\n"
+            msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += f"📊 Total: {total_interfaces} | 🟢 Up: {up_count} | 🔴 Down: {down_count}\n"
+            msg += f"📄 Halaman {page}/{total_pages}\n"
+            msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            
+            for iface in interfaces[start_idx:end_idx]:
+                status = iface['status']
+                if status == 'up':
+                    icon = "🟢"
+                elif status == 'down':
+                    icon = "🔴"
+                else:
+                    icon = "⚪"
+                
+                msg += f"{icon} {iface['name']}\n"
                 if iface.get('description'):
-                    msg += f"    {iface['description']}\n"
+                    desc = iface['description'][:40]
+                    if len(iface['description']) > 40:
+                        desc += "..."
+                    msg += f"   📝 {desc}\n"
             
-            if len(interfaces) > 30:
-                msg += f"\n... dan {len(interfaces) - 30} interface lainnya"
+            msg += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             
-            msg += f"\n\nTotal: {len(interfaces)} interface"
+            if total_pages > 1:
+                msg += f"📄 Halaman lain: /interfaces {device_name} [1-{total_pages}]"
             
             await checking_msg.edit_text(msg)
             
     except Exception as e:
         logger.error(f"Error: {str(e)}")
-        await checking_msg.edit_text(f"Error: {str(e)}")
+        await checking_msg.edit_text(f"❌ Error: {str(e)}")
 
 
 async def check_interface(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -525,7 +568,7 @@ async def check_interface(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if len(context.args) < 2:
         await update.message.reply_text(
-            "CEK STATUS INTERFACE\n\n"
+            "📡 CEK STATUS INTERFACE\n\n"
             "Gunakan: /cek [device] [interface]\n\n"
             "Contoh:\n"
             "/cek router-1 Gi0/0\n"
@@ -538,11 +581,11 @@ async def check_interface(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     device = db.get_device(device_name)
     if not device:
-        await update.message.reply_text(f"Perangkat '{device_name}' tidak ditemukan")
+        await update.message.reply_text(f"❌ Perangkat '{device_name}' tidak ditemukan")
         return
     
     checking_msg = await update.message.reply_text(
-        f"Mengecek {interface_name} di {device_name}..."
+        f"⏳ Mengecek {interface_name} di {device_name}..."
     )
     
     try:
@@ -557,31 +600,36 @@ async def check_interface(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         with BotLinkMaster(config) as bot:
             if not bot.connected:
-                await checking_msg.edit_text(f"Gagal koneksi ke {device_name}")
+                await checking_msg.edit_text(f"❌ Gagal koneksi ke {device_name}")
                 return
             
             info = bot.get_interface_status(interface_name)
             
             status = info.get('status', 'unknown')
-            icon = "[UP]" if status == 'up' else "[DOWN]" if status == 'down' else "[?]"
+            if status == 'up':
+                icon = "🟢 UP"
+            elif status == 'down':
+                icon = "🔴 DOWN"
+            else:
+                icon = "⚪ UNKNOWN"
             
-            msg = f"STATUS INTERFACE\n"
-            msg += "="*30 + "\n\n"
-            msg += f"Device: {device_name}\n"
-            msg += f"Interface: {interface_name}\n"
-            msg += f"Status: {icon} {status.upper()}\n"
+            msg = f"📡 STATUS INTERFACE\n"
+            msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            msg += f"📦 Device: {device_name}\n"
+            msg += f"🔌 Interface: {interface_name}\n"
+            msg += f"📶 Status: {icon}\n"
             
             if info.get('description'):
-                msg += f"Description: {info['description']}\n"
+                msg += f"📝 Description: {info['description']}\n"
             
-            msg += f"\nGunakan /redaman {device_name} {interface_name}\n"
+            msg += f"\n💡 Gunakan /redaman {device_name} {interface_name}\n"
             msg += f"untuk cek optical power"
             
             await checking_msg.edit_text(msg)
             
     except Exception as e:
         logger.error(f"Error: {str(e)}")
-        await checking_msg.edit_text(f"Error: {str(e)}")
+        await checking_msg.edit_text(f"❌ Error: {str(e)}")
 
 
 async def check_optical(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -591,16 +639,16 @@ async def check_optical(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if len(context.args) < 2:
         await update.message.reply_text(
-            "CEK OPTICAL POWER / REDAMAN\n"
-            "="*30 + "\n\n"
+            "🔍 CEK OPTICAL POWER / REDAMAN\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "Gunakan: /redaman [device] [interface]\n\n"
-            "Contoh Interface Biasa:\n"
+            "📌 Contoh Interface Biasa:\n"
             "/redaman router-1 Gi0/0\n"
-            "/redaman switch-1 Te0/1\n\n"
-            "Contoh OLT/ONU:\n"
+            "/redaman switch-1 100GE1/0/5\n\n"
+            "📌 Contoh OLT/ONU:\n"
             "/redaman olt-zte gpon-olt_1/2/1\n"
             "/redaman olt-zte gpon-onu_1/2/1:10\n\n"
-            "Data yang ditampilkan:\n"
+            "📊 Data yang ditampilkan:\n"
             "- TX Power (dBm)\n"
             "- RX Power (dBm)\n"
             "- Attenuation (dB) untuk ONU\n"
@@ -613,17 +661,17 @@ async def check_optical(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     device = db.get_device(device_name)
     if not device:
-        await update.message.reply_text(f"Perangkat '{device_name}' tidak ditemukan")
+        await update.message.reply_text(f"❌ Perangkat '{device_name}' tidak ditemukan")
         return
     
     vendor = device.vendor or 'generic'
     vendor_cfg = get_vendor_config(vendor)
     
     checking_msg = await update.message.reply_text(
-        f"Mengecek optical power...\n\n"
-        f"Device: {device_name}\n"
-        f"Interface: {interface_name}\n"
-        f"Vendor: {vendor_cfg.name}\n\n"
+        f"⏳ Mengecek optical power...\n\n"
+        f"📦 Device: {device_name}\n"
+        f"🔌 Interface: {interface_name}\n"
+        f"📦 Vendor: {vendor_cfg.name}\n\n"
         f"Mohon tunggu..."
     )
     
@@ -640,9 +688,9 @@ async def check_optical(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with BotLinkMaster(config) as bot:
             if not bot.connected:
                 await checking_msg.edit_text(
-                    f"GAGAL KONEKSI\n\n"
-                    f"Device: {device_name}\n"
-                    f"Host: {device.host}:{device.port}\n\n"
+                    f"❌ GAGAL KONEKSI\n\n"
+                    f"📦 Device: {device_name}\n"
+                    f"🌐 Host: {device.host}:{device.port}\n\n"
                     f"Periksa:\n"
                     f"- Host dan port benar\n"
                     f"- Kredensial valid\n"
@@ -653,59 +701,63 @@ async def check_optical(update: Update, context: ContextTypes.DEFAULT_TYPE):
             optical = bot.check_interface_with_optical(interface_name)
             
             status = optical.get('status', 'unknown')
-            link_icon = "[UP]" if status == 'up' else "[DOWN]" if status == 'down' else "[?]"
+            if status == 'up':
+                link_icon = "🟢 UP"
+            elif status == 'down':
+                link_icon = "🔴 DOWN"
+            else:
+                link_icon = "⚪ UNKNOWN"
             
             signal = optical.get('optical_status', 'unknown')
             signal_icons = {
-                'excellent': '[EXCELLENT]',
-                'good': '[GOOD]',
-                'fair': '[FAIR]',
-                'weak': '[WEAK]',
-                'very_weak': '[VERY WEAK]',
-                'critical': '[CRITICAL]',
+                'excellent': '🟢 EXCELLENT',
+                'good': '🟢 GOOD',
+                'fair': '🟡 FAIR',
+                'weak': '🟠 WEAK',
+                'very_weak': '🔴 VERY WEAK',
+                'critical': '🔴 CRITICAL',
             }
-            signal_icon = signal_icons.get(signal, '[?]')
+            signal_icon = signal_icons.get(signal, '⚪ UNKNOWN')
             
-            msg = f"OPTICAL POWER STATUS\n"
-            msg += "="*30 + "\n\n"
-            msg += f"Device: {device_name}\n"
-            msg += f"Vendor: {vendor_cfg.name}\n"
-            msg += f"Interface: {interface_name}\n"
-            msg += f"Link Status: {link_icon} {status.upper()}\n\n"
+            msg = f"🔍 OPTICAL POWER STATUS\n"
+            msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            msg += f"📦 Device: {device_name}\n"
+            msg += f"📦 Vendor: {vendor_cfg.name}\n"
+            msg += f"🔌 Interface: {interface_name}\n"
+            msg += f"📶 Link Status: {link_icon}\n\n"
             
-            msg += f"OPTICAL READINGS:\n"
-            msg += f"  TX Power: {optical.get('tx_power_dbm', 'N/A')}\n"
-            msg += f"  RX Power: {optical.get('rx_power_dbm', 'N/A')}\n"
+            msg += f"📊 OPTICAL READINGS:\n"
+            msg += f"   TX Power: {optical.get('tx_power_dbm', 'N/A')}\n"
+            msg += f"   RX Power: {optical.get('rx_power_dbm', 'N/A')}\n"
             
             if optical.get('attenuation'):
-                msg += f"  Attenuation: {optical.get('attenuation_db', 'N/A')}\n"
+                msg += f"   Attenuation: {optical.get('attenuation_db', 'N/A')}\n"
             
-            msg += f"  Signal: {signal_icon} {signal.upper()}\n\n"
+            msg += f"   Signal: {signal_icon}\n\n"
             
-            msg += f"REFERENSI LEVEL:\n"
-            msg += f"  Excellent: > -8 dBm\n"
-            msg += f"  Good: -8 to -14 dBm\n"
-            msg += f"  Fair: -14 to -20 dBm\n"
-            msg += f"  Weak: -20 to -25 dBm\n"
-            msg += f"  Critical: < -25 dBm\n"
+            msg += f"📋 REFERENSI LEVEL:\n"
+            msg += f"   Excellent: > -8 dBm\n"
+            msg += f"   Good: -8 to -14 dBm\n"
+            msg += f"   Fair: -14 to -20 dBm\n"
+            msg += f"   Weak: -20 to -25 dBm\n"
+            msg += f"   Critical: < -25 dBm\n"
             
             if not optical.get('found'):
-                msg += f"\n{'='*30}\n"
-                msg += f"DATA TIDAK DITEMUKAN\n\n"
+                msg += f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                msg += f"⚠️ DATA TIDAK DITEMUKAN\n\n"
                 msg += f"Kemungkinan:\n"
-                msg += f"1. Interface bukan SFP\n"
+                msg += f"1. Interface bukan SFP/transceiver\n"
                 msg += f"2. Vendor setting salah\n"
-                msg += f"3. Untuk ONU gunakan format:\n"
-                msg += f"   gpon-onu_1/2/1:10\n\n"
+                msg += f"3. Cek format interface\n\n"
                 msg += f"Command: {optical.get('command_used', 'N/A')}"
             else:
-                msg += f"\nCommand: {optical.get('command_used', 'N/A')}"
+                msg += f"\n✅ Command: {optical.get('command_used', 'N/A')}"
             
             await checking_msg.edit_text(msg)
             
     except Exception as e:
         logger.error(f"Optical error: {str(e)}")
-        await checking_msg.edit_text(f"Error: {str(e)}")
+        await checking_msg.edit_text(f"❌ Error: {str(e)}")
 
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -724,7 +776,7 @@ def main():
         print("TELEGRAM_BOT_TOKEN=your_token_here")
         return
     
-    logger.info("Starting BotLinkMaster v4.5...")
+    logger.info("Starting BotLinkMaster v4.5.1...")
     logger.info(f"Timezone: {tz_manager.get_timezone()}")
     
     if ALLOWED_CHAT_IDS:
@@ -752,9 +804,10 @@ def main():
     
     application.add_error_handler(error_handler)
     
-    print("\n" + "="*50)
-    print("BotLinkMaster v4.5 Started!")
-    print("="*50)
+    print("")
+    print("=" * 50)
+    print("BotLinkMaster v4.5.1 Started!")
+    print("=" * 50)
     print(f"\nTimezone: {tz_manager.get_timezone()}")
     print(f"Time: {tz_manager.get_current_time()}")
     print("\nCommands:")
