@@ -1,0 +1,16 @@
+# BotLinkMaster v4.5 - Python Dependencies
+
+# Telegram Bot API
+python-telegram-bot>=20.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# SSH connections
+paramiko>=3.0.0
+
+# Timezone support (fallback for Python < 3.9)
+pytz>=2023.3
+
+# Optional: For better async performance
+# aiohttp>=3.8.0
