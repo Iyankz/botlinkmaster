@@ -1,295 +1,228 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.1 - Telegram Bot Interface
-Telegram bot for managing and monitoring network devices
+BotLinkMaster v4.2 - Telegram Bot
+Network device monitoring with multi-vendor optical power support
 
-Author: Yayang Ardiansyah
-License: MIT
+Author: BotLinkMaster
+Version: 4.2
 """
 
 import os
 import logging
 from dotenv import load_dotenv
 from telegram import Update
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    ContextTypes,
-    MessageHandler,
-    filters
-)
-from telegram.constants import ParseMode
+from telegram.ext import Application, CommandHandler, ContextTypes
 
 from botlinkmaster import BotLinkMaster, ConnectionConfig, Protocol
 from database import DatabaseManager
+from vendor_commands import get_supported_vendors, get_vendor_config, VENDOR_CONFIGS
 
-# Load environment variables from .env file
 load_dotenv()
 
-# Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('botlinkmaster.log'),
-        logging.StreamHandler()
-    ]
+    handlers=[logging.FileHandler('botlinkmaster.log'), logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
 
-# Initialize database
 db = DatabaseManager()
 
-# Load allowed chat IDs from environment
 ALLOWED_CHAT_IDS = os.getenv('ALLOWED_CHAT_IDS', '')
 if ALLOWED_CHAT_IDS:
-    ALLOWED_CHAT_IDS = [int(chat_id.strip()) for chat_id in ALLOWED_CHAT_IDS.split(',') if chat_id.strip()]
+    ALLOWED_CHAT_IDS = [int(x.strip()) for x in ALLOWED_CHAT_IDS.split(',') if x.strip()]
 else:
     ALLOWED_CHAT_IDS = []
 
-logger.info(f"Allowed chat IDs: {ALLOWED_CHAT_IDS if ALLOWED_CHAT_IDS else 'All (no restriction)'}")
-
 
 def is_authorized(chat_id: int) -> bool:
-    """Check if chat ID is authorized to use the bot"""
-    if not ALLOWED_CHAT_IDS:  # If empty, allow all
+    if not ALLOWED_CHAT_IDS:
         return True
     return chat_id in ALLOWED_CHAT_IDS
 
 
-async def check_authorization(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Check if user is authorized and send message if not"""
+async def check_auth(update: Update) -> bool:
     chat_id = update.effective_chat.id
-    
     if not is_authorized(chat_id):
-        logger.warning(f"Unauthorized access attempt from chat ID: {chat_id}")
         await update.message.reply_text(
-            "❌ *Access Denied*\n\n"
-            "Anda tidak memiliki akses ke bot ini.\n\n"
-            f"Your Chat ID: `{chat_id}`\n\n"
-            "Hubungi administrator untuk mendapatkan akses.",
-            parse_mode=ParseMode.MARKDOWN
+            f"Access Denied\n\nYour Chat ID: {chat_id}\nHubungi admin untuk akses."
         )
         return False
     return True
 
 
+# =============================================================================
+# COMMAND HANDLERS
+# =============================================================================
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send a message when the command /start is issued"""
-    if not await check_authorization(update, context):
+    if not await check_auth(update):
         return
-    
-    chat_id = update.effective_chat.id
-    welcome_message = """
-🤖 *BotLinkMaster v4\.1\.0*
-
-Selamat datang\! Bot ini membantu Anda memonitor perangkat jaringan\.
-
-📋 *Perintah yang tersedia:*
-/start \- Tampilkan pesan ini
-/help \- Bantuan lengkap
-/list \- Daftar semua perangkat
-/add \- Tambah perangkat baru
-/device <nama> \- Info detail perangkat
-/cek <device> <interface> \- Cek status interface
-/delete <nama> \- Hapus perangkat
-/myid \- Tampilkan Chat ID Anda
-
-Gunakan /help untuk panduan lengkap\.
-"""
     await update.message.reply_text(
-        welcome_message,
-        parse_mode=ParseMode.MARKDOWN_V2
+        "BotLinkMaster v4.2.0\n\n"
+        "Bot monitoring perangkat jaringan dengan support optical power multi-vendor.\n\n"
+        "Perintah:\n"
+        "/start - Tampilkan pesan ini\n"
+        "/help - Bantuan lengkap\n"
+        "/list - Daftar perangkat\n"
+        "/add - Tambah perangkat\n"
+        "/device [nama] - Info perangkat\n"
+        "/cek [device] [interface] - Cek status\n"
+        "/redaman [device] [interface] - Cek optical power\n"
+        "/vendors - Daftar vendor\n"
+        "/delete [nama] - Hapus perangkat\n"
+        "/myid - Chat ID Anda"
     )
-    logger.info(f"User {chat_id} started the bot")
 
 
 async def myid_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show user's chat ID"""
     chat_id = update.effective_chat.id
     username = update.effective_user.username or "N/A"
-    first_name = update.effective_user.first_name or "N/A"
-    
-    message = f"""
-📱 *Informasi Anda*
-
-*Chat ID:* `{chat_id}`
-*Username:* @{username}
-*Nama:* {first_name}
-
-Gunakan Chat ID ini untuk konfigurasi ALLOWED\_CHAT\_IDS di file \.env
-"""
-    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN_V2)
-
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send help message"""
-    if not await check_authorization(update, context):
-        return
-    
-    help_text = """
-📖 *Bantuan BotLinkMaster*
-
-*1\. Menambah Perangkat \(/add\)*
-Format multiline:
-```
-/add
-nama: router\-1
-host: 192\.168\.1\.1
-username: admin
-password: password123
-protocol: ssh
-port: 22
-description: Router utama
-location: Kantor pusat
-```
-
-*2\. Cek Interface \(/cek\)*
-```
-/cek router\-1 GigabitEthernet0/0
-```
-
-*3\. List Perangkat \(/list\)*
-```
-/list
-```
-
-*4\. Detail Perangkat \(/device\)*
-```
-/device router\-1
-```
-
-*5\. Hapus Perangkat \(/delete\)*
-```
-/delete router\-1
-```
-
-*6\. Chat ID \(/myid\)*
-```
-/myid
-```
-
-*Catatan:*
-• Protocol: ssh atau telnet
-• Port opsional \(default SSH:22, Telnet:23\)
-• Description dan location opsional
-"""
     await update.message.reply_text(
-        help_text,
-        parse_mode=ParseMode.MARKDOWN_V2
+        f"Chat ID: {chat_id}\n"
+        f"Username: @{username}\n\n"
+        f"Gunakan Chat ID ini untuk ALLOWED_CHAT_IDS di .env"
     )
 
 
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_auth(update):
+        return
+    await update.message.reply_text(
+        "BANTUAN BOTLINKMASTER v4.2\n\n"
+        "1. TAMBAH PERANGKAT (/add)\n"
+        "/add\n"
+        "nama: router-1\n"
+        "host: 192.168.1.1\n"
+        "username: admin\n"
+        "password: pass123\n"
+        "protocol: ssh\n"
+        "port: 22\n"
+        "vendor: cisco_ios\n"
+        "description: Router utama\n\n"
+        "2. CEK INTERFACE (/cek)\n"
+        "/cek router-1 Gi0/0\n\n"
+        "3. CEK REDAMAN/OPTICAL (/redaman)\n"
+        "/redaman router-1 Gi0/0\n\n"
+        "4. VENDOR DIDUKUNG (/vendors)\n"
+        "cisco_ios, cisco_nxos, huawei, zte,\n"
+        "juniper, mikrotik, nokia, hp_aruba,\n"
+        "fiberhome, dcn, h3c, ruijie, bdcom,\n"
+        "raisecom, fs, allied, datacom\n\n"
+        "PENTING: Set vendor yang benar agar\n"
+        "command optical sesuai dengan perangkat!"
+    )
+
+
+async def vendors_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show supported vendors with their commands"""
+    if not await check_auth(update):
+        return
+    
+    msg = "VENDOR YANG DIDUKUNG:\n\n"
+    
+    vendors_info = [
+        ("cisco_ios", "Cisco IOS/IOS-XE", "show interface {int} transceiver"),
+        ("cisco_nxos", "Cisco NX-OS", "show interface {int} transceiver details"),
+        ("huawei", "Huawei VRP", "display transceiver interface {int}"),
+        ("zte", "ZTE", "show transceiver interface {int}"),
+        ("juniper", "Juniper JunOS", "show interfaces diagnostics optics {int}"),
+        ("mikrotik", "MikroTik", "/interface ethernet monitor {int} once"),
+        ("nokia", "Nokia SR-OS", "show port {int} optical"),
+        ("hp_aruba", "HP/Aruba", "show interface {int} transceiver"),
+        ("fiberhome", "FiberHome", "show transceiver interface {int}"),
+        ("dcn", "DCN", "show transceiver interface {int}"),
+        ("h3c", "H3C Comware", "display transceiver interface {int}"),
+        ("ruijie", "Ruijie", "show transceiver interface {int}"),
+        ("bdcom", "BDCOM", "show transceiver interface {int}"),
+        ("raisecom", "Raisecom", "show transceiver {int}"),
+        ("fs", "FS.COM", "show transceiver interface {int}"),
+        ("allied", "Allied Telesis", "show system pluggable {int}"),
+        ("datacom", "Datacom", "show interface {int} transceiver"),
+    ]
+    
+    for vendor_key, name, cmd in vendors_info:
+        msg += f"- {name}\n"
+        msg += f"  vendor: {vendor_key}\n"
+        msg += f"  cmd: {cmd}\n\n"
+    
+    msg += "Gunakan nilai 'vendor' saat /add perangkat"
+    
+    await update.message.reply_text(msg)
+
+
 async def list_devices(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """List all registered devices"""
-    if not await check_authorization(update, context):
+    if not await check_auth(update):
         return
     
     devices = db.get_all_devices()
-    
     if not devices:
-        await update.message.reply_text(
-            "❌ Belum ada perangkat terdaftar.\n\n"
-            "Gunakan /add untuk menambah perangkat."
-        )
+        await update.message.reply_text("Belum ada perangkat. Gunakan /add")
         return
     
-    message = "📋 *Daftar Perangkat:*\n\n"
-    for device in devices:
-        message += f"🔹 *{device.name}*\n"
-        message += f"   Host: `{device.host}`\n"
-        message += f"   Protocol: {device.protocol.upper()}"
-        if device.port:
-            message += f":{device.port}"
-        message += "\n"
-        if device.description:
-            message += f"   📝 {device.description}\n"
-        if device.location:
-            message += f"   📍 {device.location}\n"
-        message += "\n"
+    msg = "DAFTAR PERANGKAT:\n\n"
+    for d in devices:
+        msg += f"- {d.name}\n"
+        msg += f"  Host: {d.host}\n"
+        msg += f"  Protocol: {d.protocol}"
+        if d.port:
+            msg += f":{d.port}"
+        msg += "\n"
+        vendor = getattr(d, 'vendor', 'generic') or 'generic'
+        msg += f"  Vendor: {vendor}\n\n"
     
-    message += f"Total: {len(devices)} perangkat"
-    
-    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+    msg += f"Total: {len(devices)} perangkat"
+    await update.message.reply_text(msg)
 
 
 async def add_device_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /add command - expects multiline input"""
-    if not await check_authorization(update, context):
+    if not await check_auth(update):
         return
     
-    if context.args:
+    text = update.message.text
+    lines = text.split('\n')[1:]
+    
+    if not lines:
         await update.message.reply_text(
-            "⚠️ Format salah!\n\n"
-            "Gunakan format multiline:\n"
+            "FORMAT TAMBAH PERANGKAT:\n\n"
             "/add\n"
             "nama: router-1\n"
             "host: 192.168.1.1\n"
             "username: admin\n"
             "password: pass123\n"
             "protocol: ssh\n"
-            "port: 22 (opsional)\n"
-            "description: Router utama (opsional)\n"
-            "location: Kantor (opsional)"
+            "port: 22\n"
+            "vendor: cisco_ios\n"
+            "description: Router utama\n\n"
+            "Field wajib: nama, host, username, password\n"
+            "Ketik /vendors untuk daftar vendor"
         )
         return
     
-    # Get the full message text
-    text = update.message.text
-    lines = text.split('\n')[1:]  # Skip the /add line
-    
-    if not lines:
-        await update.message.reply_text(
-            "ℹ️ Masukkan data perangkat:\n\n"
-            "Format:\n"
-            "nama: router-1\n"
-            "host: 192.168.1.1\n"
-            "username: admin\n"
-            "password: pass123\n"
-            "protocol: ssh (or telnet)\n"
-            "port: 22 (opsional)\n"
-            "description: Router utama (opsional)\n"
-            "location: Kantor pusat (opsional)"
-        )
-        return
-    
-    # Parse the input
     data = {}
     for line in lines:
         line = line.strip()
-        if ':' not in line:
-            continue
-        key, value = line.split(':', 1)
-        data[key.strip().lower()] = value.strip()
+        if ':' in line:
+            key, value = line.split(':', 1)
+            data[key.strip().lower()] = value.strip()
     
-    # Validate required fields
     required = ['nama', 'host', 'username', 'password']
     missing = [f for f in required if f not in data]
-    
     if missing:
-        await update.message.reply_text(
-            f"❌ Field wajib belum lengkap: {', '.join(missing)}\n\n"
-            "Field wajib: nama, host, username, password"
-        )
+        await update.message.reply_text(f"Field belum lengkap: {', '.join(missing)}")
         return
     
-    # Set defaults
     protocol = data.get('protocol', 'ssh').lower()
-    if protocol not in ['ssh', 'telnet']:
-        await update.message.reply_text(
-            "❌ Protocol harus 'ssh' atau 'telnet'"
-        )
-        return
-    
     port = data.get('port')
     if port:
         try:
             port = int(port)
         except ValueError:
-            await update.message.reply_text("❌ Port harus berupa angka")
+            await update.message.reply_text("Port harus angka")
             return
     
-    # Add device
+    vendor = data.get('vendor', 'generic').lower()
+    
     device = db.add_device(
         name=data['nama'],
         host=data['host'],
@@ -298,263 +231,293 @@ async def add_device_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         protocol=protocol,
         port=port,
         description=data.get('description'),
-        location=data.get('location')
+        location=data.get('location'),
+        vendor=vendor
     )
     
     if device:
-        message = f"✅ Perangkat berhasil ditambahkan!\n\n"
-        message += f"📱 Nama: *{device.name}*\n"
-        message += f"🌐 Host: `{device.host}`\n"
-        message += f"🔐 Protocol: {device.protocol.upper()}"
+        msg = f"Perangkat ditambahkan!\n\n"
+        msg += f"Nama: {device.name}\n"
+        msg += f"Host: {device.host}\n"
+        msg += f"Protocol: {device.protocol}"
         if device.port:
-            message += f":{device.port}"
-        message += "\n"
-        if device.description:
-            message += f"📝 Deskripsi: {device.description}\n"
-        if device.location:
-            message += f"📍 Lokasi: {device.location}\n"
-        
-        await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+            msg += f":{device.port}"
+        msg += f"\nVendor: {vendor}\n"
+        await update.message.reply_text(msg)
     else:
-        await update.message.reply_text(
-            "❌ Gagal menambah perangkat!\n"
-            "Perangkat dengan nama tersebut mungkin sudah ada."
-        )
+        await update.message.reply_text("Gagal menambah perangkat. Nama mungkin sudah ada.")
 
 
 async def device_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show device information and cached interfaces"""
-    if not await check_authorization(update, context):
+    if not await check_auth(update):
         return
     
     if not context.args:
-        await update.message.reply_text(
-            "ℹ️ Gunakan: /device <nama_perangkat>\n\n"
-            "Contoh: /device router-1"
-        )
+        await update.message.reply_text("Gunakan: /device [nama]\nContoh: /device router-1")
         return
     
     device_name = ' '.join(context.args)
     device = db.get_device(device_name)
     
     if not device:
-        await update.message.reply_text(
-            f"❌ Perangkat '{device_name}' tidak ditemukan.\n\n"
-            "Gunakan /list untuk melihat daftar perangkat."
-        )
+        await update.message.reply_text(f"Perangkat '{device_name}' tidak ditemukan")
         return
     
-    # Build device info message
-    message = f"📱 *Informasi Perangkat*\n\n"
-    message += f"*Nama:* {device.name}\n"
-    message += f"*Host:* `{device.host}`\n"
-    message += f"*Username:* {device.username}\n"
-    message += f"*Protocol:* {device.protocol.upper()}"
+    vendor = getattr(device, 'vendor', 'generic') or 'generic'
+    vendor_cfg = get_vendor_config(vendor)
+    
+    msg = f"INFO PERANGKAT: {device.name}\n\n"
+    msg += f"Host: {device.host}\n"
+    msg += f"Username: {device.username}\n"
+    msg += f"Protocol: {device.protocol}"
     if device.port:
-        message += f":{device.port}"
-    message += "\n"
+        msg += f":{device.port}"
+    msg += f"\nVendor: {vendor} ({vendor_cfg.name})\n"
     if device.description:
-        message += f"*Deskripsi:* {device.description}\n"
-    if device.location:
-        message += f"*Lokasi:* {device.location}\n"
+        msg += f"Deskripsi: {device.description}\n"
     
-    # Get cached interfaces
-    interfaces = db.get_device_interfaces(device_name)
-    if interfaces:
-        message += f"\n📊 *Cached Interfaces:* ({len(interfaces)})\n"
-        for iface in interfaces[:10]:  # Limit to 10
-            status_icon = "🟢" if iface.status and "up" in iface.status.lower() else "🔴"
-            message += f"{status_icon} `{iface.interface_name}` - {iface.status or 'unknown'}\n"
-        
-        if len(interfaces) > 10:
-            message += f"\n_...dan {len(interfaces) - 10} interface lainnya_"
-    else:
-        message += "\nℹ️ Belum ada interface yang di-cache."
+    msg += f"\nOptical Command:\n{vendor_cfg.show_optical_interface}"
     
-    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+    await update.message.reply_text(msg)
 
 
 async def check_interface(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Check interface status - main command"""
-    if not await check_authorization(update, context):
+    if not await check_auth(update):
         return
     
     if len(context.args) < 2:
         await update.message.reply_text(
-            "ℹ️ Gunakan: /cek <device> <interface>\n\n"
-            "Contoh: /cek router-1 GigabitEthernet0/0\n"
-            "atau: /cek router-1 Gi0/0"
+            "Gunakan: /cek [device] [interface]\n"
+            "Contoh: /cek router-1 Gi0/0"
         )
         return
     
     device_name = context.args[0]
     interface_name = ' '.join(context.args[1:])
     
-    # Get device from database
     device = db.get_device(device_name)
     if not device:
-        await update.message.reply_text(
-            f"❌ Perangkat '{device_name}' tidak ditemukan.\n\n"
-            "Gunakan /list untuk melihat daftar perangkat."
-        )
+        await update.message.reply_text(f"Perangkat '{device_name}' tidak ditemukan")
         return
     
-    # Send checking message
     checking_msg = await update.message.reply_text(
-        f"🔍 Mengecek interface {interface_name} di {device_name}...\n"
-        "⏳ Mohon tunggu..."
+        f"Mengecek {interface_name} di {device_name}..."
     )
     
     try:
-        # Create connection config
+        vendor = getattr(device, 'vendor', 'generic') or 'generic'
         config = ConnectionConfig(
             host=device.host,
             username=device.username,
             password=device.password,
             protocol=Protocol.SSH if device.protocol == 'ssh' else Protocol.TELNET,
-            port=device.port
+            port=device.port,
+            vendor=vendor
         )
         
-        # Connect and get interface info
+        with BotLinkMaster(config) as bot:
+            if not bot.connected:
+                await checking_msg.edit_text(f"Gagal koneksi ke {device_name}")
+                return
+            
+            info = bot.get_specific_interface(interface_name)
+            
+            if not info:
+                await checking_msg.edit_text(f"Interface '{interface_name}' tidak ditemukan")
+                return
+            
+            status = info.get('status', 'unknown')
+            icon = "UP" if 'up' in status.lower() else "DOWN"
+            
+            msg = f"STATUS INTERFACE\n\n"
+            msg += f"Device: {device_name}\n"
+            msg += f"Interface: {interface_name}\n"
+            msg += f"Status: {icon} ({status})\n"
+            if info.get('description'):
+                msg += f"Description: {info['description']}\n"
+            
+            msg += f"\nGunakan /redaman {device_name} {interface_name}\n"
+            msg += f"untuk cek optical power"
+            
+            await checking_msg.edit_text(msg)
+            
+    except Exception as e:
+        logger.error(f"Error: {str(e)}")
+        await checking_msg.edit_text(f"Error: {str(e)}")
+
+
+async def check_optical(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """CEK REDAMAN / OPTICAL POWER - MAIN COMMAND"""
+    if not await check_auth(update):
+        return
+    
+    if len(context.args) < 2:
+        await update.message.reply_text(
+            "CEK OPTICAL POWER / REDAMAN\n\n"
+            "Gunakan: /redaman [device] [interface]\n\n"
+            "Contoh:\n"
+            "/redaman router-1 Gi0/0\n"
+            "/redaman switch-1 Te0/1\n"
+            "/redaman olt-1 gpon-olt_1/1/1\n\n"
+            "Data yang akan ditampilkan:\n"
+            "- TX Power (dBm)\n"
+            "- RX Power (dBm)\n"
+            "- Temperature (C)\n"
+            "- Signal Status"
+        )
+        return
+    
+    device_name = context.args[0]
+    interface_name = ' '.join(context.args[1:])
+    
+    device = db.get_device(device_name)
+    if not device:
+        await update.message.reply_text(f"Perangkat '{device_name}' tidak ditemukan")
+        return
+    
+    vendor = getattr(device, 'vendor', 'generic') or 'generic'
+    vendor_cfg = get_vendor_config(vendor)
+    
+    checking_msg = await update.message.reply_text(
+        f"Mengecek optical power...\n\n"
+        f"Device: {device_name}\n"
+        f"Interface: {interface_name}\n"
+        f"Vendor: {vendor_cfg.name}\n\n"
+        f"Command: {vendor_cfg.show_optical_interface.format(interface=interface_name)}\n\n"
+        f"Mohon tunggu..."
+    )
+    
+    try:
+        config = ConnectionConfig(
+            host=device.host,
+            username=device.username,
+            password=device.password,
+            protocol=Protocol.SSH if device.protocol == 'ssh' else Protocol.TELNET,
+            port=device.port,
+            vendor=vendor
+        )
+        
         with BotLinkMaster(config) as bot:
             if not bot.connected:
                 await checking_msg.edit_text(
-                    f"❌ Gagal koneksi ke {device_name}!\n\n"
-                    "Periksa:\n"
-                    "• Host dan port benar\n"
-                    "• Kredensial valid\n"
-                    "• Device dapat dijangkau"
+                    f"GAGAL KONEKSI\n\n"
+                    f"Device: {device_name}\n"
+                    f"Host: {device.host}\n\n"
+                    f"Periksa:\n"
+                    f"- Host dan port benar\n"
+                    f"- Kredensial valid\n"
+                    f"- Device dapat dijangkau"
                 )
                 return
             
-            # Get specific interface
-            interface_info = bot.get_specific_interface(interface_name)
+            # Get optical info
+            optical = bot.check_interface_with_optical(interface_name)
             
-            if not interface_info:
-                await checking_msg.edit_text(
-                    f"❌ Interface '{interface_name}' tidak ditemukan di {device_name}!\n\n"
-                    "Periksa nama interface dengan benar."
-                )
-                return
+            # Build response
+            status = optical.get('status', 'unknown')
+            link_icon = "[UP]" if 'up' in status.lower() else "[DOWN]"
             
-            # Cache the interface
-            db.cache_interface(
-                device_name=device_name,
-                interface_name=interface_name,
-                status=interface_info.get('status'),
-                protocol_status=interface_info.get('status'),
-                description=interface_info.get('description')
-            )
+            # Signal status
+            signal = optical.get('optical_status', 'unknown')
+            if signal == 'excellent':
+                signal_icon = "[EXCELLENT]"
+            elif signal == 'good':
+                signal_icon = "[GOOD]"
+            elif signal == 'fair':
+                signal_icon = "[FAIR]"
+            elif signal == 'weak':
+                signal_icon = "[WEAK]"
+            elif signal == 'critical':
+                signal_icon = "[CRITICAL]"
+            else:
+                signal_icon = "[?]"
             
-            # Build response message
-            status = interface_info.get('status', 'unknown')
-            status_icon = "🟢" if status and "up" in status.lower() else "🔴"
+            msg = f"OPTICAL POWER STATUS\n"
+            msg += f"{'='*30}\n\n"
+            msg += f"Device: {device_name}\n"
+            msg += f"Vendor: {vendor_cfg.name}\n"
+            msg += f"Interface: {interface_name}\n"
+            msg += f"Link Status: {link_icon} {status}\n\n"
             
-            message = f"{status_icon} *Interface Status*\n\n"
-            message += f"*Device:* {device_name}\n"
-            message += f"*Interface:* `{interface_name}`\n"
-            message += f"*Status:* {status.upper()}\n"
+            msg += f"OPTICAL READINGS:\n"
+            msg += f"TX Power: {optical.get('tx_power_dbm', 'N/A')}\n"
+            msg += f"RX Power: {optical.get('rx_power_dbm', 'N/A')}\n"
             
-            if 'description' in interface_info and interface_info['description']:
-                message += f"*Description:* {interface_info['description']}\n"
+            if optical.get('temperature'):
+                msg += f"Temperature: {optical['temperature']} C\n"
             
-            if 'ip_address' in interface_info:
-                message += f"*IP Address:* `{interface_info['ip_address']}`\n"
+            msg += f"Signal: {signal_icon} {signal.upper()}\n\n"
             
-            if 'mac_address' in interface_info:
-                message += f"*MAC Address:* `{interface_info['mac_address']}`\n"
+            # Reference levels
+            msg += f"REFERENSI LEVEL:\n"
+            msg += f"Excellent: > -8 dBm\n"
+            msg += f"Good: -8 to -14 dBm\n"
+            msg += f"Fair: -14 to -20 dBm\n"
+            msg += f"Weak: -20 to -25 dBm\n"
+            msg += f"Critical: < -25 dBm\n"
             
-            message += f"\n✅ Interface dicek pada {update.message.date.strftime('%Y-%m-%d %H:%M:%S')}"
+            # If no data found
+            if not optical.get('found'):
+                msg += f"\n{'='*30}\n"
+                msg += f"DATA TIDAK DITEMUKAN\n\n"
+                msg += f"Kemungkinan:\n"
+                msg += f"1. Interface bukan SFP/transceiver\n"
+                msg += f"2. Vendor setting salah\n"
+                msg += f"3. Command tidak didukung\n\n"
+                msg += f"Command yang dicoba:\n"
+                msg += f"{optical.get('command_used', 'unknown')}\n\n"
+                msg += f"Coba update vendor dengan benar.\n"
+                msg += f"Ketik /vendors untuk daftar."
+            else:
+                msg += f"\nCommand: {optical.get('command_used', 'N/A')}"
             
-            await checking_msg.edit_text(message, parse_mode=ParseMode.MARKDOWN)
+            await checking_msg.edit_text(msg)
             
     except Exception as e:
-        logger.error(f"Error checking interface: {str(e)}")
-        await checking_msg.edit_text(
-            f"❌ Error saat mengecek interface!\n\n"
-            f"Error: {str(e)}"
-        )
+        logger.error(f"Optical error: {str(e)}")
+        await checking_msg.edit_text(f"Error: {str(e)}")
 
 
 async def delete_device(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Delete a device"""
-    if not await check_authorization(update, context):
+    if not await check_auth(update):
         return
     
     if not context.args:
-        await update.message.reply_text(
-            "ℹ️ Gunakan: /delete <nama_perangkat>\n\n"
-            "Contoh: /delete router-1"
-        )
+        await update.message.reply_text("Gunakan: /delete [nama]")
         return
     
     device_name = ' '.join(context.args)
     device = db.get_device(device_name)
     
     if not device:
-        await update.message.reply_text(
-            f"❌ Perangkat '{device_name}' tidak ditemukan."
-        )
+        await update.message.reply_text(f"Perangkat '{device_name}' tidak ditemukan")
         return
     
-    # Delete device
     if db.delete_device(device_name):
-        await update.message.reply_text(
-            f"✅ Perangkat '{device_name}' berhasil dihapus!\n\n"
-            "Cache interface juga telah dihapus."
-        )
+        await update.message.reply_text(f"Perangkat '{device_name}' dihapus")
     else:
-        await update.message.reply_text(
-            f"❌ Gagal menghapus perangkat '{device_name}'."
-        )
+        await update.message.reply_text(f"Gagal menghapus '{device_name}'")
 
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Log errors caused by Updates"""
-    logger.error(f"Update {update} caused error {context.error}")
+    logger.error(f"Error: {context.error}")
 
+
+# =============================================================================
+# MAIN
+# =============================================================================
 
 def main():
-    """Start the bot"""
-    # Get bot token from environment
     token = os.getenv('TELEGRAM_BOT_TOKEN')
-    
     if not token:
-        logger.error("TELEGRAM_BOT_TOKEN not found in environment!")
-        print("\n❌ ERROR: TELEGRAM_BOT_TOKEN tidak ditemukan!")
-        print("\nPastikan:")
-        print("1. File .env ada di directory yang sama")
-        print("2. File .env berisi: TELEGRAM_BOT_TOKEN=your_token")
-        print("3. Tidak ada spasi sebelum/sesudah =")
-        print("\nContoh isi .env:")
-        print("TELEGRAM_BOT_TOKEN=123456:ABCdefGHIjklMNOpqrsTUVwxyz")
-        print("\nDapatkan token dari @BotFather di Telegram")
-        print("\n🔧 Run diagnostic: python diagnose.py")
+        print("ERROR: TELEGRAM_BOT_TOKEN tidak ditemukan di .env")
         return
     
-    logger.info("Starting BotLinkMaster Telegram Bot...")
-    logger.info(f"Token: {token[:10]}... (length: {len(token)})")
+    logger.info("Starting BotLinkMaster v4.2...")
     
-    # Verify token format
-    if ':' not in token:
-        logger.error("Invalid token format!")
-        print("\n❌ ERROR: Token format tidak valid!")
-        print("Token harus seperti: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz")
-        print("\n🔧 Run diagnostic: python diagnose.py")
-        return
+    application = Application.builder().token(token).build()
     
-    # Create application
-    try:
-        application = Application.builder().token(token).build()
-        logger.info("Application created successfully")
-    except Exception as e:
-        logger.error(f"Failed to create application: {e}")
-        print(f"\n❌ ERROR: Gagal membuat application!")
-        print(f"Error: {e}")
-        print("\n🔧 Run diagnostic: python diagnose.py")
-        return
-    
-    # Register command handlers
+    # Register handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("myid", myid_command))
@@ -562,473 +525,19 @@ def main():
     application.add_handler(CommandHandler("add", add_device_command))
     application.add_handler(CommandHandler("device", device_info))
     application.add_handler(CommandHandler("cek", check_interface))
+    application.add_handler(CommandHandler("redaman", check_optical))
+    application.add_handler(CommandHandler("optical", check_optical))
+    application.add_handler(CommandHandler("vendors", vendors_command))
     application.add_handler(CommandHandler("delete", delete_device))
-    logger.info("Command handlers registered")
     
-    # Register error handler
     application.add_error_handler(error_handler)
     
-    # Start the bot
-    logger.info("Bot started successfully! Press Ctrl+C to stop.")
-    print("\n✅ Bot started successfully!")
-    print("📱 Buka Telegram dan mulai chat dengan bot Anda")
-    print("⌨️  Ketik /start untuk memulai")
-    
+    logger.info("Bot started!")
     if ALLOWED_CHAT_IDS:
-        print(f"\n🔒 Access restriction enabled for {len(ALLOWED_CHAT_IDS)} chat ID(s)")
         logger.info(f"Access restricted to: {ALLOWED_CHAT_IDS}")
-    else:
-        print("\n⚠️  No access restriction (all users can use the bot)")
-        logger.info("No access restriction - all users allowed")
     
-    print("\n[Press Ctrl+C to stop]\n")
-    print("📋 Troubleshooting:")
-    print("   - If bot doesn't respond, check: tail -f botlinkmaster.log")
-    print("   - Run diagnostic: python diagnose.py")
-    print("   - Test basic bot: python test_bot.py")
-    print()
-    
-    try:
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
-    except Exception as e:
-        logger.error(f"Error during polling: {e}")
-        print(f"\n❌ ERROR: {e}")
-        print("\n🔧 Run diagnostic: python diagnose.py")
-
-
-if __name__ == '__main__':
-    main()
-
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send a message when the command /start is issued"""
-    welcome_message = """
-🤖 *BotLinkMaster v4\.0*
-
-Selamat datang\! Bot ini membantu Anda memonitor perangkat jaringan\.
-
-📋 *Perintah yang tersedia:*
-/start \- Tampilkan pesan ini
-/help \- Bantuan lengkap
-/list \- Daftar semua perangkat
-/add \- Tambah perangkat baru
-/device <nama> \- Info detail perangkat
-/cek <device> <interface> \- Cek status interface
-/delete <nama> \- Hapus perangkat
-
-Gunakan /help untuk panduan lengkap\.
-"""
-    await update.message.reply_text(
-        welcome_message,
-        parse_mode=ParseMode.MARKDOWN_V2
-    )
-
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send help message"""
-    help_text = """
-📖 *Bantuan BotLinkMaster*
-
-*1\. Menambah Perangkat \(/add\)*
-Format multiline:
-```
-/add
-nama: router\-1
-host: 192\.168\.1\.1
-username: admin
-password: password123
-protocol: ssh
-port: 22
-description: Router utama
-location: Kantor pusat
-```
-
-*2\. Cek Interface \(/cek\)*
-```
-/cek router\-1 GigabitEthernet0/0
-```
-
-*3\. List Perangkat \(/list\)*
-```
-/list
-```
-
-*4\. Detail Perangkat \(/device\)*
-```
-/device router\-1
-```
-
-*5\. Hapus Perangkat \(/delete\)*
-```
-/delete router\-1
-```
-
-*Catatan:*
-• Protocol: ssh atau telnet
-• Port opsional \(default SSH:22, Telnet:23\)
-• Description dan location opsional
-"""
-    await update.message.reply_text(
-        help_text,
-        parse_mode=ParseMode.MARKDOWN_V2
-    )
-
-
-async def list_devices(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """List all registered devices"""
-    devices = db.get_all_devices()
-    
-    if not devices:
-        await update.message.reply_text(
-            "❌ Belum ada perangkat terdaftar.\n\n"
-            "Gunakan /add untuk menambah perangkat."
-        )
-        return
-    
-    message = "📋 *Daftar Perangkat:*\n\n"
-    for device in devices:
-        message += f"🔹 *{device.name}*\n"
-        message += f"   Host: `{device.host}`\n"
-        message += f"   Protocol: {device.protocol.upper()}"
-        if device.port:
-            message += f":{device.port}"
-        message += "\n"
-        if device.description:
-            message += f"   📝 {device.description}\n"
-        if device.location:
-            message += f"   📍 {device.location}\n"
-        message += "\n"
-    
-    message += f"Total: {len(devices)} perangkat"
-    
-    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
-
-
-async def add_device_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /add command - expects multiline input"""
-    if context.args:
-        await update.message.reply_text(
-            "⚠️ Format salah!\n\n"
-            "Gunakan format multiline:\n"
-            "/add\n"
-            "nama: router-1\n"
-            "host: 192.168.1.1\n"
-            "username: admin\n"
-            "password: pass123\n"
-            "protocol: ssh\n"
-            "port: 22 (opsional)\n"
-            "description: Router utama (opsional)\n"
-            "location: Kantor (opsional)"
-        )
-        return
-    
-    # Get the full message text
-    text = update.message.text
-    lines = text.split('\n')[1:]  # Skip the /add line
-    
-    if not lines:
-        await update.message.reply_text(
-            "ℹ️ Masukkan data perangkat:\n\n"
-            "Format:\n"
-            "nama: router-1\n"
-            "host: 192.168.1.1\n"
-            "username: admin\n"
-            "password: pass123\n"
-            "protocol: ssh (or telnet)\n"
-            "port: 22 (opsional)\n"
-            "description: Router utama (opsional)\n"
-            "location: Kantor pusat (opsional)"
-        )
-        return
-    
-    # Parse the input
-    data = {}
-    for line in lines:
-        line = line.strip()
-        if ':' not in line:
-            continue
-        key, value = line.split(':', 1)
-        data[key.strip().lower()] = value.strip()
-    
-    # Validate required fields
-    required = ['nama', 'host', 'username', 'password']
-    missing = [f for f in required if f not in data]
-    
-    if missing:
-        await update.message.reply_text(
-            f"❌ Field wajib belum lengkap: {', '.join(missing)}\n\n"
-            "Field wajib: nama, host, username, password"
-        )
-        return
-    
-    # Set defaults
-    protocol = data.get('protocol', 'ssh').lower()
-    if protocol not in ['ssh', 'telnet']:
-        await update.message.reply_text(
-            "❌ Protocol harus 'ssh' atau 'telnet'"
-        )
-        return
-    
-    port = data.get('port')
-    if port:
-        try:
-            port = int(port)
-        except ValueError:
-            await update.message.reply_text("❌ Port harus berupa angka")
-            return
-    
-    # Add device
-    device = db.add_device(
-        name=data['nama'],
-        host=data['host'],
-        username=data['username'],
-        password=data['password'],
-        protocol=protocol,
-        port=port,
-        description=data.get('description'),
-        location=data.get('location')
-    )
-    
-    if device:
-        message = f"✅ Perangkat berhasil ditambahkan!\n\n"
-        message += f"📱 Nama: *{device.name}*\n"
-        message += f"🌐 Host: `{device.host}`\n"
-        message += f"🔐 Protocol: {device.protocol.upper()}"
-        if device.port:
-            message += f":{device.port}"
-        message += "\n"
-        if device.description:
-            message += f"📝 Deskripsi: {device.description}\n"
-        if device.location:
-            message += f"📍 Lokasi: {device.location}\n"
-        
-        await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
-    else:
-        await update.message.reply_text(
-            "❌ Gagal menambah perangkat!\n"
-            "Perangkat dengan nama tersebut mungkin sudah ada."
-        )
-
-
-async def device_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show device information and cached interfaces"""
-    if not context.args:
-        await update.message.reply_text(
-            "ℹ️ Gunakan: /device <nama_perangkat>\n\n"
-            "Contoh: /device router-1"
-        )
-        return
-    
-    device_name = ' '.join(context.args)
-    device = db.get_device(device_name)
-    
-    if not device:
-        await update.message.reply_text(
-            f"❌ Perangkat '{device_name}' tidak ditemukan.\n\n"
-            "Gunakan /list untuk melihat daftar perangkat."
-        )
-        return
-    
-    # Build device info message
-    message = f"📱 *Informasi Perangkat*\n\n"
-    message += f"*Nama:* {device.name}\n"
-    message += f"*Host:* `{device.host}`\n"
-    message += f"*Username:* {device.username}\n"
-    message += f"*Protocol:* {device.protocol.upper()}"
-    if device.port:
-        message += f":{device.port}"
-    message += "\n"
-    if device.description:
-        message += f"*Deskripsi:* {device.description}\n"
-    if device.location:
-        message += f"*Lokasi:* {device.location}\n"
-    
-    # Get cached interfaces
-    interfaces = db.get_device_interfaces(device_name)
-    if interfaces:
-        message += f"\n📊 *Cached Interfaces:* ({len(interfaces)})\n"
-        for iface in interfaces[:10]:  # Limit to 10
-            status_icon = "🟢" if iface.status and "up" in iface.status.lower() else "🔴"
-            message += f"{status_icon} `{iface.interface_name}` - {iface.status or 'unknown'}\n"
-        
-        if len(interfaces) > 10:
-            message += f"\n_...dan {len(interfaces) - 10} interface lainnya_"
-    else:
-        message += "\nℹ️ Belum ada interface yang di-cache."
-    
-    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
-
-
-async def check_interface(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Check interface status - main command"""
-    if len(context.args) < 2:
-        await update.message.reply_text(
-            "ℹ️ Gunakan: /cek <device> <interface>\n\n"
-            "Contoh: /cek router-1 GigabitEthernet0/0\n"
-            "atau: /cek router-1 Gi0/0"
-        )
-        return
-    
-    device_name = context.args[0]
-    interface_name = ' '.join(context.args[1:])
-    
-    # Get device from database
-    device = db.get_device(device_name)
-    if not device:
-        await update.message.reply_text(
-            f"❌ Perangkat '{device_name}' tidak ditemukan.\n\n"
-            "Gunakan /list untuk melihat daftar perangkat."
-        )
-        return
-    
-    # Send checking message
-    checking_msg = await update.message.reply_text(
-        f"🔍 Mengecek interface {interface_name} di {device_name}...\n"
-        "⏳ Mohon tunggu..."
-    )
-    
-    try:
-        # Create connection config
-        config = ConnectionConfig(
-            host=device.host,
-            username=device.username,
-            password=device.password,
-            protocol=Protocol.SSH if device.protocol == 'ssh' else Protocol.TELNET,
-            port=device.port
-        )
-        
-        # Connect and get interface info
-        with BotLinkMaster(config) as bot:
-            if not bot.connected:
-                await checking_msg.edit_text(
-                    f"❌ Gagal koneksi ke {device_name}!\n\n"
-                    "Periksa:\n"
-                    "• Host dan port benar\n"
-                    "• Kredensial valid\n"
-                    "• Device dapat dijangkau"
-                )
-                return
-            
-            # Get specific interface
-            interface_info = bot.get_specific_interface(interface_name)
-            
-            if not interface_info:
-                await checking_msg.edit_text(
-                    f"❌ Interface '{interface_name}' tidak ditemukan di {device_name}!\n\n"
-                    "Periksa nama interface dengan benar."
-                )
-                return
-            
-            # Cache the interface
-            db.cache_interface(
-                device_name=device_name,
-                interface_name=interface_name,
-                status=interface_info.get('status'),
-                protocol_status=interface_info.get('status'),
-                description=interface_info.get('description')
-            )
-            
-            # Build response message
-            status = interface_info.get('status', 'unknown')
-            status_icon = "🟢" if status and "up" in status.lower() else "🔴"
-            
-            message = f"{status_icon} *Interface Status*\n\n"
-            message += f"*Device:* {device_name}\n"
-            message += f"*Interface:* `{interface_name}`\n"
-            message += f"*Status:* {status.upper()}\n"
-            
-            if 'description' in interface_info and interface_info['description']:
-                message += f"*Description:* {interface_info['description']}\n"
-            
-            if 'ip_address' in interface_info:
-                message += f"*IP Address:* `{interface_info['ip_address']}`\n"
-            
-            if 'mac_address' in interface_info:
-                message += f"*MAC Address:* `{interface_info['mac_address']}`\n"
-            
-            message += f"\n✅ Interface dicek pada {update.message.date.strftime('%Y-%m-%d %H:%M:%S')}"
-            
-            await checking_msg.edit_text(message, parse_mode=ParseMode.MARKDOWN)
-            
-    except Exception as e:
-        logger.error(f"Error checking interface: {str(e)}")
-        await checking_msg.edit_text(
-            f"❌ Error saat mengecek interface!\n\n"
-            f"Error: {str(e)}"
-        )
-
-
-async def delete_device(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Delete a device"""
-    if not context.args:
-        await update.message.reply_text(
-            "ℹ️ Gunakan: /delete <nama_perangkat>\n\n"
-            "Contoh: /delete router-1"
-        )
-        return
-    
-    device_name = ' '.join(context.args)
-    device = db.get_device(device_name)
-    
-    if not device:
-        await update.message.reply_text(
-            f"❌ Perangkat '{device_name}' tidak ditemukan."
-        )
-        return
-    
-    # Delete device
-    if db.delete_device(device_name):
-        await update.message.reply_text(
-            f"✅ Perangkat '{device_name}' berhasil dihapus!\n\n"
-            "Cache interface juga telah dihapus."
-        )
-    else:
-        await update.message.reply_text(
-            f"❌ Gagal menghapus perangkat '{device_name}'."
-        )
-
-
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Log errors caused by Updates"""
-    logger.error(f"Update {update} caused error {context.error}")
-
-
-def main():
-    """Start the bot"""
-    # Get bot token from environment
-    token = os.getenv('TELEGRAM_BOT_TOKEN')
-    
-    if not token:
-        logger.error("TELEGRAM_BOT_TOKEN not found in environment!")
-        print("\n❌ ERROR: TELEGRAM_BOT_TOKEN tidak ditemukan!")
-        print("\nSet token dengan salah satu cara:")
-        print("1. Export: export TELEGRAM_BOT_TOKEN='your_token'")
-        print("2. File .env: TELEGRAM_BOT_TOKEN=your_token")
-        print("\nDapatkan token dari @BotFather di Telegram")
-        return
-    
-    logger.info("Starting BotLinkMaster Telegram Bot...")
-    
-    # Create application
-    application = Application.builder().token(token).build()
-    
-    # Register command handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("list", list_devices))
-    application.add_handler(CommandHandler("add", add_device_command))
-    application.add_handler(CommandHandler("device", device_info))
-    application.add_handler(CommandHandler("cek", check_interface))
-    application.add_handler(CommandHandler("delete", delete_device))
-    
-    # Register error handler
-    application.add_error_handler(error_handler)
-    
-    # Start the bot
-    logger.info("Bot started successfully! Press Ctrl+C to stop.")
-    print("\n✅ Bot started successfully!")
-    print("📱 Buka Telegram dan mulai chat dengan bot Anda")
-    print("⌨️  Ketik /start untuk memulai")
+    print("\nBotLinkMaster v4.2 Started!")
+    print("Commands: /start /help /list /add /cek /redaman /vendors")
     print("\n[Press Ctrl+C to stop]\n")
     
     application.run_polling(allowed_updates=Update.ALL_TYPES)

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.0 - SSH/Telnet Connection Module
-Handles connections to network devices via SSH or Telnet
+BotLinkMaster v4.2 - Network Device Connection Module
+SSH/Telnet connection with multi-vendor optical power support
 
-Author: Yayang Ardiansyah
-License: MIT
+Author: BotLinkMaster
+Version: 4.2
 """
 
 import paramiko
@@ -12,12 +12,19 @@ import telnetlib
 import socket
 import time
 import re
+import logging
 from enum import Enum
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Any
-import logging
 
-# Setup logging
+from vendor_commands import (
+    get_vendor_config,
+    OpticalParser,
+    expand_interface_name,
+    get_optical_commands,
+    Vendor
+)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -40,54 +47,38 @@ class ConnectionConfig:
     protocol: Protocol = Protocol.SSH
     port: Optional[int] = None
     timeout: int = 30
+    vendor: str = "generic"
     
     def __post_init__(self):
-        """Set default ports if not specified"""
         if self.port is None:
             self.port = 22 if self.protocol == Protocol.SSH else 23
 
 
 class BotLinkMaster:
-    """Main class for connecting to network devices"""
+    """Main class for network device connections"""
     
     def __init__(self, config: ConnectionConfig):
-        """
-        Initialize connection handler
-        
-        Args:
-            config: ConnectionConfig object with connection details
-        """
         self.config = config
         self.client = None
         self.shell = None
         self.connected = False
+        self.vendor_config = get_vendor_config(config.vendor)
+        self.optical_parser = OpticalParser(config.vendor)
         
     def connect(self) -> bool:
-        """
-        Connect to device using configured protocol
-        
-        Returns:
-            bool: True if connection successful, False otherwise
-        """
+        """Connect to device"""
         try:
             if self.config.protocol == Protocol.SSH:
                 return self._connect_ssh()
             elif self.config.protocol == Protocol.TELNET:
                 return self._connect_telnet()
-            else:
-                logger.error(f"Unsupported protocol: {self.config.protocol}")
-                return False
+            return False
         except Exception as e:
             logger.error(f"Connection failed: {str(e)}")
             return False
     
     def _connect_ssh(self) -> bool:
-        """
-        Connect via SSH using Paramiko
-        
-        Returns:
-            bool: True if successful
-        """
+        """Connect via SSH"""
         try:
             self.client = paramiko.SSHClient()
             self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -105,33 +96,26 @@ class BotLinkMaster:
             )
             
             self.shell = self.client.invoke_shell()
-            time.sleep(1)  # Wait for shell to be ready
-            self.shell.recv(65535)  # Clear initial output
+            time.sleep(1)
+            self.shell.recv(65535)
+            
+            # Disable paging
+            if self.vendor_config.disable_paging:
+                self._execute_ssh(self.vendor_config.disable_paging, 1)
             
             self.connected = True
-            logger.info(f"SSH connection established to {self.config.host}")
+            logger.info(f"SSH connected to {self.config.host}")
             return True
             
         except paramiko.AuthenticationException:
-            logger.error(f"Authentication failed for {self.config.host}")
-            return False
-        except paramiko.SSHException as e:
-            logger.error(f"SSH error: {str(e)}")
-            return False
-        except socket.error as e:
-            logger.error(f"Socket error: {str(e)}")
+            logger.error(f"Auth failed for {self.config.host}")
             return False
         except Exception as e:
-            logger.error(f"Unexpected error: {str(e)}")
+            logger.error(f"SSH error: {str(e)}")
             return False
     
     def _connect_telnet(self) -> bool:
-        """
-        Connect via Telnet
-        
-        Returns:
-            bool: True if successful
-        """
+        """Connect via Telnet"""
         try:
             logger.info(f"Connecting to {self.config.host}:{self.config.port} via Telnet...")
             
@@ -141,39 +125,30 @@ class BotLinkMaster:
                 timeout=self.config.timeout
             )
             
-            # Wait for login prompt
-            self.client.read_until(b"login: ", timeout=5)
+            # Login
+            self.client.read_until(b":", timeout=10)
             self.client.write(self.config.username.encode('ascii') + b"\n")
-            
-            # Wait for password prompt
-            self.client.read_until(b"Password: ", timeout=5)
+            self.client.read_until(b":", timeout=10)
             self.client.write(self.config.password.encode('ascii') + b"\n")
             
-            time.sleep(1)
+            time.sleep(2)
+            
+            # Disable paging
+            if self.vendor_config.disable_paging:
+                self._execute_telnet(self.vendor_config.disable_paging, 1)
+            
             self.connected = True
-            logger.info(f"Telnet connection established to {self.config.host}")
+            logger.info(f"Telnet connected to {self.config.host}")
             return True
             
-        except socket.timeout:
-            logger.error(f"Connection timeout to {self.config.host}")
-            return False
         except Exception as e:
             logger.error(f"Telnet error: {str(e)}")
             return False
     
     def execute_command(self, command: str, wait_time: float = 2.0) -> str:
-        """
-        Execute command on device
-        
-        Args:
-            command: Command to execute
-            wait_time: Time to wait for output (seconds)
-        
-        Returns:
-            str: Command output
-        """
+        """Execute command on device"""
         if not self.connected:
-            logger.error("Not connected to device")
+            logger.error("Not connected")
             return ""
         
         try:
@@ -181,14 +156,13 @@ class BotLinkMaster:
                 return self._execute_ssh(command, wait_time)
             elif self.config.protocol == Protocol.TELNET:
                 return self._execute_telnet(command, wait_time)
-            else:
-                return ""
+            return ""
         except Exception as e:
-            logger.error(f"Command execution failed: {str(e)}")
+            logger.error(f"Command error: {str(e)}")
             return ""
     
     def _execute_ssh(self, command: str, wait_time: float) -> str:
-        """Execute command via SSH"""
+        """Execute SSH command"""
         try:
             self.shell.send(command + "\n")
             time.sleep(wait_time)
@@ -196,153 +170,145 @@ class BotLinkMaster:
             output = ""
             while self.shell.recv_ready():
                 output += self.shell.recv(65535).decode('utf-8', errors='ignore')
+                time.sleep(0.5)
             
             return output
-            
         except Exception as e:
-            logger.error(f"SSH command execution error: {str(e)}")
+            logger.error(f"SSH exec error: {str(e)}")
             return ""
     
     def _execute_telnet(self, command: str, wait_time: float) -> str:
-        """Execute command via Telnet"""
+        """Execute Telnet command"""
         try:
             self.client.write(command.encode('ascii') + b"\n")
             time.sleep(wait_time)
-            
             output = self.client.read_very_eager().decode('utf-8', errors='ignore')
             return output
-            
         except Exception as e:
-            logger.error(f"Telnet command execution error: {str(e)}")
+            logger.error(f"Telnet exec error: {str(e)}")
             return ""
     
-    def get_interfaces(self) -> List[Dict[str, Any]]:
-        """
-        Get list of interfaces from device
-        
-        Returns:
-            List of interface dictionaries with name, status, description
-        """
-        command = "show interfaces description"
-        output = self.execute_command(command)
-        
-        if not output:
-            return []
-        
-        interfaces = []
-        lines = output.split('\n')
-        
-        # Parse interface information
-        # This is a generic parser - may need adjustment for specific vendors
-        for line in lines:
-            line = line.strip()
-            if not line or line.startswith('#') or 'Interface' in line:
-                continue
-            
-            # Try to parse interface line
-            # Format: Interface Status Protocol Description
-            match = re.match(r'(\S+)\s+(\S+)\s+(\S+)\s*(.*)', line)
-            if match:
-                interface = {
-                    'name': match.group(1),
-                    'status': match.group(2),
-                    'protocol': match.group(3),
-                    'description': match.group(4).strip() if match.group(4) else ''
-                }
-                interfaces.append(interface)
-        
-        logger.info(f"Found {len(interfaces)} interfaces")
-        return interfaces
-    
     def get_specific_interface(self, interface_name: str) -> Optional[Dict[str, Any]]:
-        """
-        Get details for a specific interface
+        """Get interface details"""
+        full_interface = expand_interface_name(interface_name)
         
-        Args:
-            interface_name: Name of the interface (e.g., "GigabitEthernet0/0")
-        
-        Returns:
-            Dictionary with interface details or None if not found
-        """
-        command = f"show interface {interface_name}"
+        command = self.vendor_config.show_interface.format(interface=full_interface)
         output = self.execute_command(command)
         
-        if not output or "Invalid" in output:
-            logger.warning(f"Interface {interface_name} not found or command invalid")
-            return None
+        if not output or "Invalid" in output or "Error" in output:
+            command = self.vendor_config.show_interface.format(interface=interface_name)
+            output = self.execute_command(command)
+            
+            if not output or "Invalid" in output:
+                return None
         
-        # Parse interface details
         interface_info = {
             'name': interface_name,
-            'full_output': output
+            'full_output': output,
+            'status': 'unknown'
         }
         
         # Extract status
-        status_match = re.search(r'line protocol is (\w+)', output, re.IGNORECASE)
+        status_match = re.search(self.vendor_config.status_pattern, output, re.IGNORECASE)
         if status_match:
             interface_info['status'] = status_match.group(1)
         
-        # Extract description
-        desc_match = re.search(r'Description:\s*(.+)', output)
+        # Description
+        desc_match = re.search(r'[Dd]escription[:\s]+(.+)', output)
         if desc_match:
             interface_info['description'] = desc_match.group(1).strip()
         
-        # Extract IP address
-        ip_match = re.search(r'Internet address is (\S+)', output)
-        if ip_match:
-            interface_info['ip_address'] = ip_match.group(1)
-        
-        # Extract MAC address
-        mac_match = re.search(r'address is (\S+:\S+:\S+:\S+:\S+:\S+)', output, re.IGNORECASE)
-        if mac_match:
-            interface_info['mac_address'] = mac_match.group(1)
-        
         return interface_info
     
+    def get_optical_power(self, interface_name: str) -> Dict[str, Any]:
+        """
+        Get optical power for interface - MAIN FUNCTION FOR REDAMAN
+        Tries multiple commands until one works
+        """
+        full_interface = expand_interface_name(interface_name)
+        
+        # Get all possible commands for this vendor
+        commands = get_optical_commands(self.config.vendor, full_interface)
+        
+        all_output = ""
+        result = None
+        
+        # Try each command
+        for cmd in commands:
+            logger.info(f"Trying optical command: {cmd}")
+            output = self.execute_command(cmd, wait_time=3.0)
+            
+            if output and "Invalid" not in output and "Error" not in output and "%" not in output:
+                all_output += f"\n--- Command: {cmd} ---\n{output}\n"
+                
+                # Parse the output
+                parsed = self.optical_parser.parse_optical_power(output)
+                
+                if parsed['found']:
+                    result = parsed
+                    result['command_used'] = cmd
+                    logger.info(f"Found optical data with: {cmd}")
+                    break
+        
+        # If no result from specific commands, try the generic patterns
+        if not result or not result.get('found'):
+            result = self.optical_parser.parse_optical_power(all_output)
+            result['command_used'] = 'multiple'
+        
+        result['interface'] = interface_name
+        result['all_output'] = all_output
+        
+        return result
+    
+    def check_interface_with_optical(self, interface_name: str) -> Dict[str, Any]:
+        """Get complete interface info including optical power"""
+        
+        # Get basic interface info
+        interface_info = self.get_specific_interface(interface_name) or {}
+        
+        # Get optical power
+        optical_info = self.get_optical_power(interface_name)
+        
+        # Merge
+        result = {
+            'name': interface_name,
+            'status': interface_info.get('status', 'unknown'),
+            'description': interface_info.get('description', ''),
+            'rx_power': optical_info.get('rx_power'),
+            'tx_power': optical_info.get('tx_power'),
+            'rx_power_dbm': optical_info.get('rx_power_dbm', 'N/A'),
+            'tx_power_dbm': optical_info.get('tx_power_dbm', 'N/A'),
+            'temperature': optical_info.get('temperature'),
+            'optical_status': optical_info.get('signal_status', 'unknown'),
+            'command_used': optical_info.get('command_used', 'unknown'),
+            'raw_output': optical_info.get('all_output', ''),
+            'found': optical_info.get('found', False),
+        }
+        
+        return result
+    
     def disconnect(self):
-        """Close connection to device"""
+        """Close connection"""
         try:
             if self.client:
                 if self.config.protocol == Protocol.SSH:
                     self.client.close()
                 elif self.config.protocol == Protocol.TELNET:
                     self.client.close()
-                
                 self.connected = False
                 logger.info(f"Disconnected from {self.config.host}")
         except Exception as e:
-            logger.error(f"Error during disconnect: {str(e)}")
+            logger.error(f"Disconnect error: {str(e)}")
     
     def __enter__(self):
-        """Context manager entry"""
         self.connect()
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit"""
         self.disconnect()
 
 
-# Example usage
 if __name__ == "__main__":
-    # Example SSH connection
-    config = ConnectionConfig(
-        host="192.168.1.1",
-        username="admin",
-        password="password",
-        protocol=Protocol.SSH,
-        port=22
-    )
-    
-    with BotLinkMaster(config) as device:
-        if device.connected:
-            # Get all interfaces
-            interfaces = device.get_interfaces()
-            print(f"Found {len(interfaces)} interfaces")
-            
-            # Get specific interface
-            if interfaces:
-                first_int = interfaces[0]['name']
-                details = device.get_specific_interface(first_int)
-                if details:
-                    print(f"Interface {first_int}: {details.get('status', 'unknown')}")
+    # Test example
+    print("BotLinkMaster v4.2 - Multi-vendor optical power support")
+    print("Use with telegram_bot.py for Telegram integration")
