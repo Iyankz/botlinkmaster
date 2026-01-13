@@ -17,7 +17,7 @@ Bot Telegram untuk monitoring perangkat jaringan (router dan switch) dengan duku
 - ✅ **Interface Monitoring** - Cek status UP/DOWN dan deskripsi
 - ✅ **Port Forwarding** - Satu IP bisa untuk multiple device
 
-> 📌 **Note:** OLT support akan tersedia di v5.0.0
+> 📌 **Note:** OLT support akan tersedia di v5.x.x
 
 
 ## Instalasi
