@@ -117,7 +117,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         show_interface="display interface {interface}",
         show_interface_brief="display interface brief",
         show_interface_status="display interface brief",
-        show_interface_description="display interface description",
+        show_interface_description="display interface description",     
         show_optical_all="display transceiver",
         show_optical_interface="display transceiver interface {interface}",
         show_optical_detail="display transceiver diagnosis interface {interface}",
@@ -125,6 +125,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
             "display transceiver interface {interface} verbose",
             "display transceiver diagnosis interface {interface}",
             "display interface {interface} transceiver",
+            "display interface {interface} transceiver verbose",
         ],
         # Huawei formats:
         # TX power(dBm)                         :-0.81
