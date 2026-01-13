@@ -293,6 +293,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         alt_interface_commands=[
             "/interface print",
             "/interface ethernet print",
+            "/interface print brief",
         ],
         interface_parser="mikrotik",
         rx_power_patterns=[
