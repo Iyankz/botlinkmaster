@@ -17,26 +17,7 @@ Bot Telegram untuk monitoring perangkat jaringan dengan dukungan multi-vendor da
 - ✅ **Interface Monitoring** - Cek status UP/DOWN dan deskripsi interface
 - ✅ **Port Forwarding** - Satu IP bisa untuk multiple device dengan port berbeda
 
-## Struktur Direktori
-
 ```
-botlinkmaster/
-├── telegram_bot.py      # Main Telegram bot
-├── botlinkmaster.py     # SSH/Telnet connection module
-├── database.py          # SQLite database manager
-├── vendor_commands.py   # Multi-vendor command templates
-├── timezone_config.py   # IANA timezone configuration
-├── .env                 # Environment configuration
-├── .env.example         # Example environment file
-├── botlinkmaster.db     # SQLite database (auto-created)
-├── botlinkmaster.log    # Log file (auto-created)
-├── timezone.conf        # Timezone setting (auto-created)
-├── requirements.txt     # Python dependencies
-├── install.sh           # Installation script
-├── README.md            # Documentation
-└── LICENSE              # LICENSE
-```
-
 ## 📋 Requirements
 
 - **OS:** Ubuntu 22.04 LTS atau lebih baru
@@ -764,10 +745,30 @@ sudo systemctl stop botlinkmaster
 Upload/replace file-file berikut:
 
 - `telegram_bot.py`
+```bash
+cd ~/botlinkmaster
+wget -N https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/telegram_bot.py
+```
 - `botlinkmaster.py`
+```bash
+cd ~/botlinkmaster
+wget -N https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/botlinkmaster.py
+```
 - `database.py`
+```bash
+cd ~/botlinkmaster
+wget -N https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/database.py
+```
 - `vendor_commands.py`
+```bash
+cd ~/botlinkmaster
+wget -N https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/vendor_commands.py
+```
 - `timezone_config.py`
+```bash
+cd ~/botlinkmaster
+wget -N https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/timezone_config.py
+```
 
 ### Step 4: Restart Service
 
@@ -778,6 +779,7 @@ sudo systemctl restart botlinkmaster
 Database akan otomatis migrasi ke schema baru.
 
 ---
+
 
 ## Debug Mode
 
@@ -813,17 +815,11 @@ python telegram_bot.py
 
 ## Changelog
 
-### v4.5.0 (Latest)
+### v4.5.2 (Latest)
 
-- ✅ Perbaikan kesalahan Huawei SSH "no matching host key type"
-- ✅ Dukungan pemantauan optical power OLT/ONU
-- ✅ Konfigurasi IANA Timezone
-- ✅ Dukungan Multiple Chat ID & Group
-- ✅ Daftar interface lengkap dengan status dan deskripsi
-- ✅ Dukungan Port forwarding (IP sama, port berbeda)
-- ✅ Dukungan untuk 22+ vendor
-- ✅ Tampilan attenuation untuk ONU
-- ✅ Panduan instalasi detail
+- ✅ Update Vendor vendor_command.py
+- ✅ Update telegram_bot.py
+- ✅ Update botlinkmaster.py
 
 ---
 
