@@ -587,6 +587,10 @@ class BotLinkMaster:
         """
         full_interface = expand_interface_name(interface_name)
         
+        # Special handling for MikroTik
+        if self.config.vendor.lower() == 'mikrotik':
+            return self._get_mikrotik_interface_status(interface_name)
+        
         # Try with expanded name first
         cmd = self.vendor_config.show_interface.format(interface=full_interface)
         output = self.execute_command(cmd, wait_time=3.0)
@@ -604,6 +608,99 @@ class BotLinkMaster:
             'description': self.optical_parser.parse_description(output),
             'raw_output': output,
         }
+        
+        return result
+    
+    def _get_mikrotik_interface_status(self, interface_name: str) -> Dict[str, Any]:
+        """
+        Get MikroTik interface status using /interface print brief.
+        
+        MikroTik format:
+         #    NAME           TYPE      ACTUAL-MTU  L2MTU  MAX-L2MTU  MAC-ADDRESS      
+         0    ether1         ether           1500   1584      10218  48:8F:5A:05:51:79
+         1 RS sfp-sfpplus1   ether           1500   1584      10218  48:8F:5A:05:51:69
+        
+        Flags: R=RUNNING (UP), S=SLAVE, X=DISABLED (DOWN)
+        """
+        result = {
+            'name': interface_name,
+            'full_name': interface_name,
+            'status': 'unknown',
+            'description': '',
+            'flags': '',
+            'raw_output': '',
+        }
+        
+        # Use /interface print brief to get status
+        cmd = "/interface print brief"
+        output = self.execute_command(cmd, wait_time=3.0)
+        result['raw_output'] = output
+        
+        if not output:
+            return result
+        
+        # Parse output to find the specific interface
+        lines = output.split('\n')
+        current_comment = ''
+        
+        for line in lines:
+            original_line = line
+            line = line.strip()
+            
+            # Capture comment for next interface
+            if line.startswith(';;;'):
+                current_comment = line[3:].strip()
+                continue
+            
+            # Skip non-interface lines
+            if not line or not line[0].isdigit():
+                continue
+            
+            parts = line.split()
+            if len(parts) < 2:
+                continue
+            
+            # Parse the line to find interface name
+            # Format: "NUM [FLAGS] NAME TYPE ..."
+            idx = 1
+            flags = ''
+            
+            # Check if second part is flags
+            if len(parts) > 1:
+                potential_flag = parts[1]
+                if len(potential_flag) <= 3 and all(c in 'RSXrsx' for c in potential_flag):
+                    flags = potential_flag.upper()
+                    idx = 2
+            
+            if idx >= len(parts):
+                continue
+            
+            name = parts[idx]
+            
+            # Check if this is our interface
+            if name.lower() == interface_name.lower():
+                result['flags'] = flags
+                result['description'] = current_comment
+                
+                # Determine status from flags
+                # R = RUNNING = UP
+                # RS = RUNNING + SLAVE = UP
+                # S = SLAVE = UP (part of bonding)
+                # X = DISABLED = DOWN
+                # (empty) = not running = DOWN
+                if 'R' in flags:
+                    result['status'] = 'up'
+                elif 'X' in flags:
+                    result['status'] = 'down'
+                elif 'S' in flags:
+                    result['status'] = 'up'  # Slave usually means active in bonding
+                else:
+                    result['status'] = 'down'  # No flags = not running
+                
+                return result
+            
+            # Reset comment
+            current_comment = ''
         
         return result
     
