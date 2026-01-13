@@ -95,16 +95,40 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         name="Cisco NX-OS",
         disable_paging="terminal length 0",
         show_interface="show interface {interface}",
-        show_interface_brief="show interface brief",
+        show_interface_brief="show interface status",
         show_interface_status="show interface status",
         show_interface_description="show interface description",
         show_optical_all="show interface transceiver details",
         show_optical_interface="show interface {interface} transceiver details",
         show_optical_detail="show interface {interface} transceiver details",
-        rx_power_patterns=[r"Rx\s+Power[:\s]+(-?\d+\.?\d*)\s*dBm"],
-        tx_power_patterns=[r"Tx\s+Power[:\s]+(-?\d+\.?\d*)\s*dBm"],
-        status_up_patterns=[r"line protocol is up"],
-        status_down_patterns=[r"line protocol is down"],
+        alt_interface_commands=[
+            "show interface status",
+            "show interface brief",
+            "show interface description",
+        ],
+        interface_parser="cisco_nxos",
+        rx_power_patterns=[
+            r"Rx\s+Power[:\s]+(-?\d+\.?\d*)\s*dBm",
+            r"Receive\s+Power[:\s]+(-?\d+\.?\d*)",
+            r"RX[:\s]+(-?\d+\.?\d*)\s*dBm",
+        ],
+        tx_power_patterns=[
+            r"Tx\s+Power[:\s]+(-?\d+\.?\d*)\s*dBm",
+            r"Transmit\s+Power[:\s]+(-?\d+\.?\d*)",
+            r"TX[:\s]+(-?\d+\.?\d*)\s*dBm",
+        ],
+        status_up_patterns=[
+            r"line protocol is up",
+            r"\bconnected\b",
+            r"\bup\b",
+        ],
+        status_down_patterns=[
+            r"line protocol is down",
+            r"\bnotconnect\b",
+            r"\bdisabled\b",
+            r"\bdown\b",
+            r"\bsfp not inserted\b",
+        ],
         description_pattern=r"Description[:\s]+(.+?)(?:\n|$)",
         notes="Cisco Nexus switches",
     ),
@@ -762,6 +786,92 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
         })
         
         current_comment = ''
+    
+    return interfaces
+
+
+# =============================================================================
+# CISCO NX-OS INTERFACE PARSER
+# =============================================================================
+
+def parse_cisco_nxos_interfaces(output: str) -> List[Dict[str, Any]]:
+    """
+    Parse Cisco NX-OS show interface status output
+    
+    Format:
+    --------------------------------------------------------------------------------
+    Port          Name               Status    Vlan      Duplex  Speed   Type
+    --------------------------------------------------------------------------------
+    Eth1/1        Uplink-Router      connected 1         full    10G     10Gbase-SR
+    Eth1/2        --                 notconnect 1        auto    auto    --
+    Eth1/24       Server-DB          connected trunk     full    10G     10Gbase-SR
+    """
+    interfaces = []
+    
+    if not output:
+        return interfaces
+    
+    lines = output.split('\n')
+    in_data = False
+    
+    for line in lines:
+        line = line.strip()
+        
+        if not line:
+            continue
+        
+        # Skip header separator
+        if '----' in line:
+            in_data = True
+            continue
+        
+        # Skip header line
+        if 'Port' in line and 'Status' in line:
+            continue
+        
+        if not in_data:
+            continue
+        
+        # Parse interface line
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        
+        # First part is interface name
+        iface_name = parts[0]
+        
+        # Skip if not looks like interface
+        if not any(c.isdigit() for c in iface_name):
+            continue
+        
+        # Find status - look for connected/notconnect/disabled/etc
+        status = 'unknown'
+        description = ''
+        
+        line_lower = line.lower()
+        
+        if 'connected' in line_lower and 'notconnect' not in line_lower:
+            status = 'up'
+        elif 'notconnect' in line_lower:
+            status = 'down'
+        elif 'disabled' in line_lower:
+            status = 'down'
+        elif 'sfp not' in line_lower:
+            status = 'down'
+        elif 'xcvr not' in line_lower:
+            status = 'down'
+        
+        # Get description (second column, might be -- or actual name)
+        if len(parts) >= 2:
+            desc = parts[1]
+            if desc != '--':
+                description = desc
+        
+        interfaces.append({
+            'name': iface_name,
+            'status': status,
+            'description': description,
+        })
     
     return interfaces
 

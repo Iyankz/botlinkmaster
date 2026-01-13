@@ -21,7 +21,7 @@ from typing import Optional, List, Dict, Any, Tuple
 
 from vendor_commands import (
     get_vendor_config, OpticalParser, expand_interface_name, 
-    get_optical_commands, parse_mikrotik_interfaces
+    get_optical_commands, parse_mikrotik_interfaces, parse_cisco_nxos_interfaces
 )
 
 logging.basicConfig(
@@ -315,6 +315,10 @@ class BotLinkMaster:
         if interface_parser == 'mikrotik':
             return self._get_mikrotik_interfaces()
         
+        # Cisco NX-OS special handling
+        if interface_parser == 'cisco_nxos':
+            return self._get_cisco_nxos_interfaces()
+        
         # Other vendors
         cmd = self.vendor_config.show_interface_brief
         output = self.execute_command(cmd, wait_time=3.0)
@@ -334,6 +338,28 @@ class BotLinkMaster:
             return interfaces
         
         return self._parse_default_interfaces(output)
+    
+    def _get_cisco_nxos_interfaces(self) -> List[Dict[str, Any]]:
+        """Get Cisco NX-OS interfaces"""
+        commands = [
+            "show interface status",
+            "show interface brief",
+            "show interface description",
+        ]
+        
+        for cmd in commands:
+            logger.info(f"Cisco NX-OS: Trying {cmd}")
+            output = self.execute_command(cmd, wait_time=4.0)
+            
+            if output and ('Eth' in output or 'Po' in output or 'Vlan' in output):
+                logger.info(f"Cisco NX-OS: Got data from {cmd}")
+                interfaces = parse_cisco_nxos_interfaces(output)
+                if interfaces:
+                    logger.info(f"Cisco NX-OS: Parsed {len(interfaces)} interfaces")
+                    return interfaces
+        
+        # Fallback to default parsing
+        return self._parse_default_interfaces(output if output else "")
     
     def _get_mikrotik_interfaces(self) -> List[Dict[str, Any]]:
         """Get MikroTik interfaces"""
@@ -413,6 +439,10 @@ class BotLinkMaster:
         if self.config.vendor.lower() == 'mikrotik':
             return self._get_mikrotik_interface_status(interface_name)
         
+        # Cisco NX-OS special handling
+        if self.config.vendor.lower() == 'cisco_nxos':
+            return self._get_cisco_nxos_interface_status(interface_name)
+        
         full_interface = expand_interface_name(interface_name)
         
         cmd = self.vendor_config.show_interface.format(interface=full_interface)
@@ -430,6 +460,59 @@ class BotLinkMaster:
             'raw_output': output,
         }
     
+    def _get_cisco_nxos_interface_status(self, interface_name: str) -> Dict[str, Any]:
+        """Get Cisco NX-OS interface status"""
+        result = {
+            'name': interface_name,
+            'full_name': interface_name,
+            'status': 'unknown',
+            'description': '',
+            'raw_output': '',
+        }
+        
+        # Try show interface status first (better for status)
+        output = self.execute_command("show interface status", wait_time=3.0)
+        result['raw_output'] = output
+        
+        if output:
+            # Parse to find our interface
+            for line in output.split('\n'):
+                line_lower = line.lower()
+                iface_lower = interface_name.lower()
+                
+                # Check if this line contains our interface
+                if iface_lower in line_lower or iface_lower.replace('/', '') in line_lower:
+                    parts = line.split()
+                    if len(parts) >= 3:
+                        # Get description (column 2)
+                        if len(parts) >= 2 and parts[1] != '--':
+                            result['description'] = parts[1]
+                        
+                        # Check status
+                        if 'connected' in line_lower and 'notconnect' not in line_lower:
+                            result['status'] = 'up'
+                        elif 'notconnect' in line_lower:
+                            result['status'] = 'down'
+                        elif 'disabled' in line_lower:
+                            result['status'] = 'down'
+                        elif 'sfp not' in line_lower or 'xcvr not' in line_lower:
+                            result['status'] = 'down'
+                        
+                        if result['status'] != 'unknown':
+                            logger.info(f"Cisco NX-OS {interface_name}: status={result['status']}")
+                            return result
+        
+        # Fallback: use show interface command
+        cmd = f"show interface {interface_name}"
+        output2 = self.execute_command(cmd, wait_time=3.0)
+        
+        if output2:
+            result['raw_output'] = output2
+            result['status'] = self.optical_parser.parse_interface_status(output2)
+            result['description'] = self.optical_parser.parse_description(output2)
+        
+        return result
+    
     def _get_mikrotik_interface_status(self, interface_name: str) -> Dict[str, Any]:
         """Get MikroTik interface status from /interface print brief"""
         result = {
@@ -441,31 +524,47 @@ class BotLinkMaster:
             'raw_output': '',
         }
         
-        # Get interface list and find our interface
+        # Get interface list
         output = self.execute_command("/interface print brief", wait_time=4.0)
         result['raw_output'] = output
         
         if not output:
+            logger.warning(f"MikroTik: No output from /interface print brief")
             return result
         
         # Clean ANSI
         ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
         output = ansi_escape.sub('', output)
         
+        logger.info(f"MikroTik: Looking for interface '{interface_name}'")
+        
         lines = output.split('\n')
         current_comment = ''
+        found = False
         
         for line in lines:
             line_stripped = line.strip()
             
+            # Skip empty
+            if not line_stripped:
+                continue
+            
+            # Capture comments for next interface
             if line_stripped.startswith(';;;'):
                 current_comment = line_stripped[3:].strip()
                 continue
             
+            # Skip headers
             if line_stripped.startswith('Flags:') or line_stripped.startswith('Columns:'):
                 continue
             if 'NAME' in line_stripped and 'TYPE' in line_stripped:
                 continue
+            
+            # Parse interface line: "NUM [FLAGS] NAME TYPE ..."
+            # Examples from user's output:
+            # "0   ether1         ether"
+            # "1 RS sfp-sfpplus1   ether"
+            # "2 RS sfp-sfpplus2   ether"
             
             match = re.match(r'^(\d+)\s+(.+)$', line_stripped)
             if not match:
@@ -477,12 +576,16 @@ class BotLinkMaster:
             if not parts:
                 continue
             
+            # Determine flags and name position
             flags = ''
             name_idx = 0
             
-            first = parts[0]
-            if len(first) <= 4 and all(c in 'RSDXrsdx' for c in first):
-                flags = first.upper()
+            first_part = parts[0]
+            
+            # Check if first part is flags (R, RS, S, X, etc.)
+            # Flags contain only R, S, D, X and are 1-4 chars
+            if len(first_part) <= 4 and all(c in 'RSDXrsdx' for c in first_part):
+                flags = first_part.upper()
                 name_idx = 1
             
             if name_idx >= len(parts):
@@ -490,24 +593,38 @@ class BotLinkMaster:
             
             name = parts[name_idx]
             
-            # Check if this is our interface
+            # Check if this is our interface (case insensitive)
             if name.lower() == interface_name.lower():
+                found = True
                 result['flags'] = flags
                 result['description'] = current_comment
+                
+                # Determine status from flags
+                # R = RUNNING = UP
+                # RS = RUNNING + SLAVE = UP
+                # S = SLAVE only = UP (typically in bonding)
+                # X = DISABLED = DOWN
+                # (empty) = DOWN (not running)
                 
                 if 'R' in flags:
                     result['status'] = 'up'
                 elif 'X' in flags:
                     result['status'] = 'down'
                 elif 'S' in flags:
+                    # S without R means slave but not running
+                    # But if it's part of bonding that's running, consider it up
                     result['status'] = 'up'
                 else:
                     result['status'] = 'down'
                 
-                logger.info(f"MikroTik {interface_name}: flags={flags}, status={result['status']}")
+                logger.info(f"MikroTik: Found {interface_name}, flags='{flags}', status={result['status']}")
                 return result
             
+            # Reset comment after each non-matching interface
             current_comment = ''
+        
+        if not found:
+            logger.warning(f"MikroTik: Interface '{interface_name}' not found in output")
         
         return result
     
