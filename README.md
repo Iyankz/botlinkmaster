@@ -19,6 +19,17 @@ Bot Telegram untuk monitoring perangkat jaringan (router dan switch) dengan duku
 
 > 📌 **Note:** OLT support akan tersedia di v5.x.x
 
+## 📋 Requirements
+
+- **OS:** Ubuntu 22.04 LTS 
+- **RAM:** Minimum 1GB (2GB recommended)
+- **Storage:** Minimum 2GB free space
+- **Network:** Akses internet untuk Telegram API dan Akses ke Perangkat
+- **Access:** Root/sudo privileges
+- **Python** Versi 3.8+
+- **pip3**
+- **git** (opsional, untuk clone)
+
 
 ## Instalasi
 
