@@ -121,10 +121,12 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         show_interface_description="display interface description",
         show_optical_all="display transceiver",
         show_optical_interface="display transceiver interface {interface}",
-        show_optical_detail="display transceiver diagnosis interface {interface}",
+        show_optical_detail="display interface {interface} transceiver verbose",
         alt_optical_commands=[
+            "display interface {interface} transceiver verbose",
             "display transceiver interface {interface} verbose",
             "display transceiver diagnosis interface {interface}",
+            "display transceiver interface {interface}",
         ],
         rx_power_patterns=[
             r"RX\s*power\s*\(dBm\)[:\s\|]+(-?\d+\.?\d*)",
@@ -132,6 +134,8 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
             r"Rx\s*Power\s*\(dBm\)[:\s]+(-?\d+\.?\d*)",
             r"Current\s+RX\s+Power\s*\(dBm\)[:\s]+(-?\d+\.?\d*)",
             r"RX\s+Power[:\s]+(-?\d+\.?\d*)",
+            r"Rx\s+optical\s+power[:\s]+(-?\d+\.?\d*)",
+            r"RX[:\s]+(-?\d+\.?\d*)\s*dBm",
         ],
         tx_power_patterns=[
             r"TX\s*power\s*\(dBm\)[:\s\|]+(-?\d+\.?\d*)",
@@ -139,6 +143,8 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
             r"Tx\s*Power\s*\(dBm\)[:\s]+(-?\d+\.?\d*)",
             r"Current\s+TX\s+Power\s*\(dBm\)[:\s]+(-?\d+\.?\d*)",
             r"TX\s+Power[:\s]+(-?\d+\.?\d*)",
+            r"Tx\s+optical\s+power[:\s]+(-?\d+\.?\d*)",
+            r"TX[:\s]+(-?\d+\.?\d*)\s*dBm",
         ],
         status_up_patterns=[r"current state[:\s]*UP", r"Physical[:\s]+UP", r"is\s+UP"],
         status_down_patterns=[r"current state[:\s]*DOWN", r"Physical[:\s]+DOWN", r"is\s+DOWN"],
@@ -272,53 +278,57 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
     ),
     
     # ==========================================================================
-    # MIKROTIK - IMPROVED
+    # MIKROTIK - IMPROVED v4.5.3
     # ==========================================================================
     Vendor.MIKROTIK.value: VendorConfig(
         name="MikroTik RouterOS",
         disable_paging="",
         show_interface="/interface print detail where name={interface}",
-        show_interface_brief="/interface print brief",
-        show_interface_status="/interface print brief",
-        show_interface_description="/interface print brief",
+        show_interface_brief="/interface print",
+        show_interface_status="/interface print",
+        show_interface_description="/interface print",
         show_optical_all="/interface ethernet monitor [find] once",
         show_optical_interface="/interface ethernet monitor {interface} once",
         show_optical_detail="/interface ethernet monitor {interface} once",
         alt_optical_commands=[
             "/interface sfp-sfpplus monitor {interface} once",
             "/interface sfp monitor {interface} once",
+            "/interface ethernet monitor {interface} once",
         ],
         alt_interface_commands=[
-            "/interface print brief",
             "/interface print",
+            "/interface print brief", 
             "/interface ethernet print",
+            "/interface print without-paging",
+            "interface print",
         ],
         interface_parser="mikrotik",
         rx_power_patterns=[
             r"sfp-rx-power[:\s]+(-?\d+\.?\d*)\s*dBm",
             r"sfp-rx-power[:\s]+(-?\d+\.?\d*)",
             r"rx-power[:\s]+(-?\d+\.?\d*)",
+            r"Rx\s*Power[:\s]+(-?\d+\.?\d*)",
         ],
         tx_power_patterns=[
             r"sfp-tx-power[:\s]+(-?\d+\.?\d*)\s*dBm",
             r"sfp-tx-power[:\s]+(-?\d+\.?\d*)",
             r"tx-power[:\s]+(-?\d+\.?\d*)",
+            r"Tx\s*Power[:\s]+(-?\d+\.?\d*)",
         ],
         # MikroTik flags: R=RUNNING, S=SLAVE, X=DISABLED
-        # From /interface print detail output
         status_up_patterns=[
-            r"^\s*\d+\s+R",           # Line starts with "NUM R" or "NUM RS"
-            r"^\s*\d+\s+RS",          # Running Slave
-            r"running=yes",            # From detail output
-            r"flags=.*R",              # Contains R flag
-            r"status=link-ok",         # Status field
+            r"^\s*\d+\s+R",
+            r"^\s*\d+\s+RS",
+            r"\bR\b.*\b(ether|sfp|bond|bridge|vlan)",
+            r"running=yes",
+            r"flags=.*R",
+            r"status=link-ok",
         ],
         status_down_patterns=[
-            r"^\s*\d+\s+X",            # Line starts with "NUM X" (disabled)
-            r"^\s*\d+\s+[^R]",         # Line with number but no R flag
-            r"running=no",             # From detail output
-            r"disabled=yes",           # Disabled interface
-            r"status=no-link",         # No link status
+            r"^\s*\d+\s+X",
+            r"running=no",
+            r"disabled=yes",
+            r"status=no-link",
         ],
         description_pattern=r"comment=([^\n]+)",
         notes="MikroTik RouterOS - Flags: R=RUNNING, RS=RUNNING+SLAVE, S=SLAVE, X=DISABLED",
@@ -814,21 +824,29 @@ class OpticalParser:
 
 def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
     """
-    Parse MikroTik /interface print brief output
+    Parse MikroTik /interface print output
     
-    Format MikroTik:
+    Supports multiple formats:
+    
+    Format 1 (brief):
     Flags: R - RUNNING; S - SLAVE
     Columns: NAME, TYPE, ACTUAL-MTU, L2MTU, MAX-L2MTU, MAC-ADDRESS
      #    NAME           TYPE      ACTUAL-MTU  L2MTU  MAX-L2MTU  MAC-ADDRESS      
      0    ether1         ether           1500   1584      10218  48:8F:5A:05:51:79
-    ;;; link Utara 96
      1 RS sfp-sfpplus1   ether           1500   1584      10218  48:8F:5A:05:51:69
+    
+    Format 2 (standard):
+    Flags: D - dynamic, X - disabled, R - running, S - slave
+     #     NAME            TYPE       ACTUAL-MTU L2MTU
+     0  R  ether1          ether            1500  1598
+     1  RS sfp-sfpplus1    ether            1500  1598
     
     Flags:
     - R = RUNNING (UP)
-    - RS = RUNNING + SLAVE (UP, slave of bonding/bridge)
-    - S = SLAVE only (part of bonding but status depends on master)
+    - RS = RUNNING + SLAVE (UP)
+    - S = SLAVE only 
     - X = DISABLED (DOWN)
+    - D = DYNAMIC
     - (empty) = not running (DOWN)
     """
     interfaces = []
@@ -836,11 +854,14 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
     if not output:
         return interfaces
     
+    # Clean output - remove ANSI escape codes
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    output = ansi_escape.sub('', output)
+    
     lines = output.split('\n')
     current_comment = ''
     
     for line in lines:
-        # Keep original line for comment extraction
         original_line = line
         line = line.strip()
         
@@ -851,8 +872,18 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
         if line.startswith('Flags:') or line.startswith('Columns:'):
             continue
         
-        # Skip column header line (contains NAME, TYPE, etc)
-        if 'NAME' in line and 'TYPE' in line:
+        # Skip column header lines
+        if 'NAME' in line and ('TYPE' in line or 'MTU' in line):
+            continue
+        
+        # Skip prompt lines
+        if line.endswith('>') or line.endswith('#') or '[admin@' in line:
+            continue
+        
+        # Skip banner/logo lines (MikroTik ASCII art)
+        if 'MikroTik' in line or 'MMM' in line or 'MMMM' in line:
+            continue
+        if all(c in 'MTKR |-_/\\' for c in line.replace(' ', '')):
             continue
         
         # Capture comment lines (;;; description)
@@ -860,85 +891,82 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
             current_comment = line[3:].strip()
             continue
         
-        # Skip lines that don't start with a number (after stripping leading spaces)
-        # Interface lines format: " 0    ether1" or " 1 RS sfp-sfpplus1"
-        if not line or not line[0].isdigit():
+        # Interface lines start with a number
+        # Match: "0", " 0", "0 ", " 0 R", etc.
+        match = re.match(r'^(\d+)\s+(.*)$', line)
+        if not match:
             continue
         
-        # Parse interface line
-        # Format: "NUM [FLAGS] NAME TYPE MTU ..."
-        # Examples:
-        #   "0    ether1         ether           1500"
-        #   "1 RS sfp-sfpplus1   ether           1500"
-        #   "5  S sfp-sfpplus5   ether           1500"
+        num = match.group(1)
+        rest = match.group(2).strip()
         
-        parts = line.split()
-        if len(parts) < 2:
+        if not rest:
             continue
         
-        # First part is always the number
-        if not parts[0].isdigit():
+        # Parse the rest: "[FLAGS] NAME [TYPE] [MTU] ..."
+        parts = rest.split()
+        if not parts:
             continue
         
-        # Determine flags and name position
-        # Check if second part is flags (R, RS, S, X) or name
-        idx = 1
+        # Determine if first part is flags or name
         flags = ''
+        name_idx = 0
         
-        # Flags are typically: R, RS, S, X, or combinations
-        # They are short (1-3 chars) and contain only R, S, X
-        if len(parts) > 1:
-            potential_flag = parts[1]
-            # Check if it's a flag (only contains R, S, X and length <= 3)
-            if len(potential_flag) <= 3 and all(c in 'RSXrsx' for c in potential_flag):
-                flags = potential_flag.upper()
-                idx = 2
+        first_part = parts[0]
+        
+        # Check if first part looks like flags (R, RS, S, X, D, DR, DRS, etc.)
+        # Flags contain only R, S, X, D and are typically 1-3 chars
+        if len(first_part) <= 4 and all(c in 'RSDXrsdx' for c in first_part):
+            flags = first_part.upper()
+            name_idx = 1
         
         # Get interface name
-        if idx >= len(parts):
+        if name_idx >= len(parts):
             continue
         
-        name = parts[idx]
+        name = parts[name_idx]
         
-        # Skip if name doesn't look like an interface
-        if not name or name.startswith(';;;'):
+        # Skip invalid names
+        if not name or name.startswith(';;;') or name.startswith('['):
+            continue
+        
+        # Skip if name looks like a type or number
+        if name.lower() in ['ether', 'bond', 'bridge', 'vlan', 'loopback', 'pppoe', 'gre', 'ipip']:
             continue
         
         # Determine status based on flags
         # R = RUNNING = UP
-        # RS = RUNNING + SLAVE = UP
-        # S = SLAVE (depends on master, usually UP if part of active bonding)
+        # RS = RUNNING + SLAVE = UP  
+        # S = SLAVE = UP (part of bonding)
         # X = DISABLED = DOWN
+        # D = DYNAMIC (depends on R flag)
         # (empty) = not running = DOWN
         
         if 'R' in flags:
-            status = 'up'  # R or RS means RUNNING
+            status = 'up'
         elif 'X' in flags:
-            status = 'down'  # X means DISABLED
+            status = 'down'
         elif 'S' in flags:
-            status = 'up'  # S alone - slave, typically UP if bonding is active
+            status = 'up'  # Slave typically means active
         else:
-            status = 'down'  # No flags = not running
+            status = 'down'
         
         # Get type if available
-        iface_type = parts[idx + 1] if len(parts) > idx + 1 else ''
-        
-        # Build description
-        description = current_comment
-        if iface_type and iface_type not in ['ether', 'bond', 'bridge', 'vlan', 'loopback']:
-            # If type looks like a description, use it
-            if not description:
-                description = iface_type
+        iface_type = ''
+        if len(parts) > name_idx + 1:
+            potential_type = parts[name_idx + 1].lower()
+            if potential_type in ['ether', 'bond', 'bridge', 'vlan', 'loopback', 'pppoe', 'gre', 'ipip', 'ovpn']:
+                iface_type = potential_type
         
         interfaces.append({
             'name': name,
             'status': status,
-            'description': description,
+            'description': current_comment,
             'flags': flags,
             'type': iface_type,
         })
         
-        # Reset comment after using
+        # Reset comment
         current_comment = ''
     
     return interfaces

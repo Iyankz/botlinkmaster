@@ -454,7 +454,11 @@ class BotLinkMaster:
         # Check for special parser based on vendor
         interface_parser = getattr(self.vendor_config, 'interface_parser', 'default')
         
-        # Get interface list
+        # Special handling for MikroTik
+        if interface_parser == 'mikrotik':
+            return self._get_mikrotik_interfaces()
+        
+        # Get interface list for other vendors
         cmd = self.vendor_config.show_interface_brief
         output = self.execute_command(cmd, wait_time=3.0)
         
@@ -481,12 +485,54 @@ class BotLinkMaster:
             return interfaces
         
         # Use appropriate parser
-        if interface_parser == 'mikrotik':
-            logger.info("Using MikroTik interface parser")
-            return parse_mikrotik_interfaces(output)
-        elif interface_parser == 'zte_olt':
+        if interface_parser == 'zte_olt':
             logger.info("Using ZTE OLT interface parser")
             return parse_zte_olt_interfaces(output)
+        
+        # Default parsing
+        return self._parse_default_interfaces(output)
+    
+    def _get_mikrotik_interfaces(self) -> List[Dict[str, Any]]:
+        """
+        Get MikroTik interfaces with special handling.
+        Tries multiple commands and cleans output before parsing.
+        """
+        interfaces = []
+        
+        # Commands to try in order
+        commands = [
+            "/interface print",
+            "/interface print brief",
+            "/interface ethernet print",
+            "interface print",
+        ]
+        
+        output = ""
+        for cmd in commands:
+            logger.info(f"MikroTik: Trying command: {cmd}")
+            output = self.execute_command(cmd, wait_time=4.0)  # Longer wait for MikroTik
+            
+            if output:
+                # Check if output contains interface data
+                # Should have lines starting with numbers
+                has_interface_data = bool(re.search(r'^\s*\d+\s+', output, re.MULTILINE))
+                if has_interface_data:
+                    logger.info(f"MikroTik: Got interface data from: {cmd}")
+                    break
+        
+        if not output:
+            logger.warning("MikroTik: Could not get interface list from any command")
+            return interfaces
+        
+        # Clean ANSI escape codes
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        output = ansi_escape.sub('', output)
+        
+        # Parse using MikroTik parser
+        interfaces = parse_mikrotik_interfaces(output)
+        
+        logger.info(f"MikroTik: Parsed {len(interfaces)} interfaces")
+        return interfaces
         
         # Default parsing
         return self._parse_default_interfaces(output)
@@ -613,7 +659,7 @@ class BotLinkMaster:
     
     def _get_mikrotik_interface_status(self, interface_name: str) -> Dict[str, Any]:
         """
-        Get MikroTik interface status using /interface print brief.
+        Get MikroTik interface status using /interface print.
         
         MikroTik format:
          #    NAME           TYPE      ACTUAL-MTU  L2MTU  MAX-L2MTU  MAC-ADDRESS      
@@ -631,13 +677,27 @@ class BotLinkMaster:
             'raw_output': '',
         }
         
-        # Use /interface print brief to get status
-        cmd = "/interface print brief"
-        output = self.execute_command(cmd, wait_time=3.0)
+        # Try multiple commands
+        commands = [
+            "/interface print",
+            "/interface print brief",
+            "/interface ethernet print",
+        ]
+        
+        output = ""
+        for cmd in commands:
+            output = self.execute_command(cmd, wait_time=3.0)
+            if output and interface_name.lower() in output.lower():
+                break
+        
         result['raw_output'] = output
         
         if not output:
             return result
+        
+        # Clean ANSI escape codes
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        output = ansi_escape.sub('', output)
         
         # Parse output to find the specific interface
         lines = output.split('\n')
@@ -652,56 +712,71 @@ class BotLinkMaster:
                 current_comment = line[3:].strip()
                 continue
             
-            # Skip non-interface lines
-            if not line or not line[0].isdigit():
+            # Skip header lines
+            if line.startswith('Flags:') or line.startswith('Columns:'):
+                continue
+            if 'NAME' in line and ('TYPE' in line or 'MTU' in line):
                 continue
             
-            parts = line.split()
-            if len(parts) < 2:
+            # Skip prompt/banner lines
+            if line.endswith('>') or line.endswith('#') or '[admin@' in line:
+                continue
+            if 'MikroTik' in line or 'MMM' in line:
                 continue
             
-            # Parse the line to find interface name
-            # Format: "NUM [FLAGS] NAME TYPE ..."
-            idx = 1
+            # Interface lines start with a number
+            match = re.match(r'^(\d+)\s+(.*)$', line)
+            if not match:
+                continue
+            
+            rest = match.group(2).strip()
+            if not rest:
+                continue
+            
+            parts = rest.split()
+            if not parts:
+                continue
+            
+            # Determine if first part is flags or name
             flags = ''
+            name_idx = 0
             
-            # Check if second part is flags
-            if len(parts) > 1:
-                potential_flag = parts[1]
-                if len(potential_flag) <= 3 and all(c in 'RSXrsx' for c in potential_flag):
-                    flags = potential_flag.upper()
-                    idx = 2
+            first_part = parts[0]
             
-            if idx >= len(parts):
+            # Check if first part looks like flags
+            if len(first_part) <= 4 and all(c in 'RSDXrsdx' for c in first_part):
+                flags = first_part.upper()
+                name_idx = 1
+            
+            # Get interface name
+            if name_idx >= len(parts):
                 continue
             
-            name = parts[idx]
+            name = parts[name_idx]
             
-            # Check if this is our interface
+            # Check if this is our interface (case insensitive)
             if name.lower() == interface_name.lower():
                 result['flags'] = flags
                 result['description'] = current_comment
                 
                 # Determine status from flags
-                # R = RUNNING = UP
-                # RS = RUNNING + SLAVE = UP
-                # S = SLAVE = UP (part of bonding)
-                # X = DISABLED = DOWN
-                # (empty) = not running = DOWN
                 if 'R' in flags:
                     result['status'] = 'up'
                 elif 'X' in flags:
                     result['status'] = 'down'
                 elif 'S' in flags:
-                    result['status'] = 'up'  # Slave usually means active in bonding
+                    result['status'] = 'up'
                 else:
-                    result['status'] = 'down'  # No flags = not running
+                    result['status'] = 'down'
                 
+                logger.info(f"MikroTik interface {interface_name}: flags={flags}, status={result['status']}")
                 return result
             
             # Reset comment
             current_comment = ''
         
+        # Interface not found in output
+        logger.warning(f"MikroTik interface {interface_name} not found in output")
         return result
     
     def get_optical_power(self, interface_name: str) -> Dict[str, Any]:
