@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster - Vendor Commands v4.5.2xxxx
+BotLinkMaster - Vendor Commands v4.5.2
 Multi-vendor support with improved ZTE OLT and MikroTik parsing
 
 Author: BotLinkMaster

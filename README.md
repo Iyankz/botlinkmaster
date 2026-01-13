@@ -1,8 +1,8 @@
-# BotLinkMaster v4.5
+# BotLinkMaster v4.5.2
 
 Bot Telegram untuk monitoring perangkat jaringan dengan dukungan multi-vendor dan optical power (redaman).
 
-![Version](https://img.shields.io/badge/version-4.5.0-blue)
+![Version](https://img.shields.io/badge/version-4.5.2-blue)
 ![Python](https://img.shields.io/badge/python-3.8+-green)
 ![License](https://img.shields.io/badge/license-MIT-orange)
 ![Ubuntu: 22.04+](https://img.shields.io/badge/Ubuntu-22.04+-orange.svg)
@@ -747,22 +747,22 @@ Upload/replace file-file berikut:
 - `telegram_bot.py`
 ```bash
 cd ~/botlinkmaster
-wget -N https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/telegram_bot.py
+wget -O telegram_bot.py https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/telegram_bot.py
 ```
 - `botlinkmaster.py`
 ```bash
 cd ~/botlinkmaster
-wget -N https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/botlinkmaster.py
+wget -O botlinkmaster.py https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/botlinkmaster.py
 ```
 - `database.py`
 ```bash
 cd ~/botlinkmaster
-wget -N https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/database.py
+wget -O database.py https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/database.py
 ```
 - `vendor_commands.py`
 ```bash
 cd ~/botlinkmaster
-wget -N https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/vendor_commands.py
+wget -O vendor_commands.py https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/vendor_commands.py
 ```
 - `timezone_config.py`
 ```bash

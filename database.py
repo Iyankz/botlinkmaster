@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.5 - Database Module
+BotLinkMaster v4.5.2- Database Module
 SQLite database with support for multiple devices per IP (port forwarding)
 
 Author: BotLinkMaster

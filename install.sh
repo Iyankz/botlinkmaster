@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# BotLinkMaster v4.5 - Installation Script
+# BotLinkMaster v4.5.2- Installation Script
 # 
 # Usage: chmod +x install.sh && ./install.sh
 #
@@ -8,7 +8,7 @@
 set -e
 
 echo "=============================================="
-echo "BotLinkMaster v4.5 - Installation Script"
+echo "BotLinkMaster v4.5.2- Installation Script"
 echo "=============================================="
 echo ""
 
@@ -120,7 +120,7 @@ else
         echo -e "${GREEN}✓ Created .env from .env.example${NC}"
     else
         cat > .env << 'EOF'
-# BotLinkMaster v4.5 Configuration
+# BotLinkMaster v4.5.2Configuration
 
 # Telegram Bot Token from @BotFather (REQUIRED)
 TELEGRAM_BOT_TOKEN=
@@ -146,7 +146,7 @@ SERVICE_FILE="/etc/systemd/system/botlinkmaster.service"
 
 # Create service content
 SERVICE_CONTENT="[Unit]
-Description=BotLinkMaster v4.5 - Network Device Monitoring Bot
+Description=BotLinkMaster v4.5.2- Network Device Monitoring Bot
 After=network.target
 
 [Service]
