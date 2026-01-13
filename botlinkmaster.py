@@ -514,7 +514,7 @@ class BotLinkMaster:
         return result
     
     def _get_mikrotik_interface_status(self, interface_name: str) -> Dict[str, Any]:
-        """Get MikroTik interface status from /interface print brief"""
+        """Get MikroTik interface status - uses same parser as get_interfaces"""
         result = {
             'name': interface_name,
             'full_name': interface_name,
@@ -524,108 +524,25 @@ class BotLinkMaster:
             'raw_output': '',
         }
         
-        # Get interface list
-        output = self.execute_command("/interface print brief", wait_time=4.0)
-        result['raw_output'] = output
+        # Get all interfaces using the working method
+        interfaces = self._get_mikrotik_interfaces()
         
-        if not output:
-            logger.warning(f"MikroTik: No output from /interface print brief")
+        if not interfaces:
+            logger.warning(f"MikroTik: No interfaces returned")
             return result
         
-        # Clean ANSI
-        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-        output = ansi_escape.sub('', output)
+        # Find our interface in the list
+        iface_lower = interface_name.lower()
         
-        logger.info(f"MikroTik: Looking for interface '{interface_name}'")
-        
-        lines = output.split('\n')
-        current_comment = ''
-        found = False
-        
-        for line in lines:
-            line_stripped = line.strip()
-            
-            # Skip empty
-            if not line_stripped:
-                continue
-            
-            # Capture comments for next interface
-            if line_stripped.startswith(';;;'):
-                current_comment = line_stripped[3:].strip()
-                continue
-            
-            # Skip headers
-            if line_stripped.startswith('Flags:') or line_stripped.startswith('Columns:'):
-                continue
-            if 'NAME' in line_stripped and 'TYPE' in line_stripped:
-                continue
-            
-            # Parse interface line: "NUM [FLAGS] NAME TYPE ..."
-            # Examples from user's output:
-            # "0   ether1         ether"
-            # "1 RS sfp-sfpplus1   ether"
-            # "2 RS sfp-sfpplus2   ether"
-            
-            match = re.match(r'^(\d+)\s+(.+)$', line_stripped)
-            if not match:
-                continue
-            
-            rest = match.group(2).strip()
-            parts = rest.split()
-            
-            if not parts:
-                continue
-            
-            # Determine flags and name position
-            flags = ''
-            name_idx = 0
-            
-            first_part = parts[0]
-            
-            # Check if first part is flags (R, RS, S, X, etc.)
-            # Flags contain only R, S, D, X and are 1-4 chars
-            if len(first_part) <= 4 and all(c in 'RSDXrsdx' for c in first_part):
-                flags = first_part.upper()
-                name_idx = 1
-            
-            if name_idx >= len(parts):
-                continue
-            
-            name = parts[name_idx]
-            
-            # Check if this is our interface (case insensitive)
-            if name.lower() == interface_name.lower():
-                found = True
-                result['flags'] = flags
-                result['description'] = current_comment
-                
-                # Determine status from flags
-                # R = RUNNING = UP
-                # RS = RUNNING + SLAVE = UP
-                # S = SLAVE only = UP (typically in bonding)
-                # X = DISABLED = DOWN
-                # (empty) = DOWN (not running)
-                
-                if 'R' in flags:
-                    result['status'] = 'up'
-                elif 'X' in flags:
-                    result['status'] = 'down'
-                elif 'S' in flags:
-                    # S without R means slave but not running
-                    # But if it's part of bonding that's running, consider it up
-                    result['status'] = 'up'
-                else:
-                    result['status'] = 'down'
-                
-                logger.info(f"MikroTik: Found {interface_name}, flags='{flags}', status={result['status']}")
+        for iface in interfaces:
+            if iface.get('name', '').lower() == iface_lower:
+                result['status'] = iface.get('status', 'unknown')
+                result['description'] = iface.get('description', '')
+                result['flags'] = iface.get('flags', '')
+                logger.info(f"MikroTik: Found {interface_name}, flags='{result['flags']}', status={result['status']}, desc='{result['description']}'")
                 return result
-            
-            # Reset comment after each non-matching interface
-            current_comment = ''
         
-        if not found:
-            logger.warning(f"MikroTik: Interface '{interface_name}' not found in output")
-        
+        logger.warning(f"MikroTik: Interface '{interface_name}' not found in {len(interfaces)} interfaces")
         return result
     
     def get_optical_power(self, interface_name: str) -> Dict[str, Any]:

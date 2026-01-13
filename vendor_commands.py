@@ -695,6 +695,13 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
     0   ether1         ether           1500   1584      10218  48:8F:5A:05:51:79
     ;;; link Utara 96
     1 RS sfp-sfpplus1   ether           1500   1584      10218  48:8F:5A:05:51:69
+    
+    Flag meanings:
+    - R = RUNNING = UP (interface is active and running)
+    - RS = RUNNING + SLAVE = UP (running and part of bonding/bridge)
+    - S = SLAVE only = DOWN (part of bonding but NOT running)
+    - X = DISABLED = DOWN
+    - (empty) = DOWN (not running)
     """
     interfaces = []
     
@@ -720,17 +727,12 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
         if 'NAME' in line_stripped and 'TYPE' in line_stripped:
             continue
         
-        # Capture comments
+        # Capture comments (description)
         if line_stripped.startswith(';;;'):
             current_comment = line_stripped[3:].strip()
             continue
         
         # Parse interface line: "NUM [FLAGS] NAME TYPE ..."
-        # Examples:
-        # "0   ether1         ether"
-        # "1 RS sfp-sfpplus1   ether"
-        # "5  S sfp-sfpplus5   ether"
-        
         match = re.match(r'^(\d+)\s+(.+)$', line_stripped)
         if not match:
             continue
@@ -761,19 +763,16 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
             continue
         
         # Determine status from flags
-        # R = RUNNING = UP
-        # RS = RUNNING + SLAVE = UP
-        # S = SLAVE = UP
-        # X = DISABLED = DOWN
-        # (empty) = DOWN
+        # CRITICAL: Only R (RUNNING) means UP
+        # - R or RS = UP (Running, or Running+Slave)
+        # - S alone = DOWN (Slave but NOT running)
+        # - X = DOWN (Disabled)
+        # - (empty) = DOWN (Not running)
+        
         if 'R' in flags:
-            status = 'up'
-        elif 'X' in flags:
-            status = 'down'
-        elif 'S' in flags:
-            status = 'up'
+            status = 'up'  # Has R flag = Running
         else:
-            status = 'down'
+            status = 'down'  # No R flag = Not running (including S alone, X, or empty)
         
         iface_type = parts[name_idx + 1] if len(parts) > name_idx + 1 else ''
         

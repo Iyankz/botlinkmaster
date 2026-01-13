@@ -563,6 +563,7 @@ async def check_optical(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             status = optical.get('status', 'unknown')
             flags = optical.get('flags', '')
+            description = optical.get('description', '')
             link_icon = "🟢 UP" if status == 'up' else "🔴 DOWN" if status == 'down' else "⚪ UNKNOWN"
             
             signal = optical.get('optical_status', 'unknown')
@@ -579,6 +580,8 @@ async def check_optical(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = f"🔍 OPTICAL POWER\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             text += f"📦 {device_name} ({vendor_cfg.name})\n"
             text += f"🔌 {interface_name}\n"
+            if description:
+                text += f"📝 {description}\n"
             text += f"📶 Link: {link_icon}\n"
             if flags:
                 text += f"🏷️ Flags: {flags}\n"
@@ -597,7 +600,7 @@ async def check_optical(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += f"   Critical: < -25 dBm\n"
             
             if not optical.get('found'):
-                text += f"\n⚠️ Data tidak ditemukan.\n"
+                text += f"\n⚠️ Data optical tidak ditemukan.\n"
                 text += f"Pastikan interface memiliki SFP.\n"
             
             await msg.edit_text(text)
