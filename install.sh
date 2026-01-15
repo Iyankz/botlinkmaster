@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# BotLinkMaster v4.5.2- Installation Script
+# BotLinkMaster v4.6.0- Installation Script
 # 
 # Usage: chmod +x install.sh && ./install.sh
 #
