@@ -2,7 +2,7 @@
 
 Bot Telegram untuk monitoring perangkat jaringan (router dan switch) dengan dukungan multi-vendor dan optical power monitoring.
 
-![Version](https://img.shields.io/badge/version-4.6.0-blue)
+[![GitHub release](https://img.shields.io/github/v/release/Iyankz/botlinkmaster)](https://github.com/Iyankz/botlinkmaster/releases)
 ![Python](https://img.shields.io/badge/python-3.8+-green)
 ![License](https://img.shields.io/badge/license-MIT-orange)
 ![Ubuntu: 22.04+](https://img.shields.io/badge/Ubuntu-22.04+-orange.svg)
