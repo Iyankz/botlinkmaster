@@ -262,30 +262,75 @@ class BotLinkMaster:
             return ""
     
     def _execute_ssh(self, command: str, wait_time: float) -> str:
+        """
+        BUG FIX: MikroTik SSH partial output
+        - Fix kasus output terpotong (mis. 16/20 interface)
+        - Menggunakan idle-time based read
+        """
+
+        # ======================================================
+        # OLD IMPLEMENTATION (BUGGY - KEPT BUT NOT USED ANYMORE)
+        # ======================================================
+        # self.shell.send(command + "\n")
+        # time.sleep(wait_time)
+        #
+        # output = ""
+        # max_wait = time.time() + 15
+        #
+        # while time.time() < max_wait:
+        #     if self.shell.recv_ready():
+        #         chunk = self.shell.recv(65535).decode(
+        #             'utf-8', errors='ignore'
+        #         )
+        #         output += chunk
+        #         time.sleep(0.3)
+        #     else:
+        #         if output:
+        #             break
+        #         time.sleep(0.5)
+        #
+        # return self._clean_output(output, command)
+        #
+        # BUG:
+        # - MikroTik mengirim output bertahap
+        # - Loop berhenti terlalu cepat
+        # ======================================================
+
         try:
             self.shell.send(command + "\n")
             time.sleep(wait_time)
-            
+
             output = ""
-            max_wait = time.time() + 15
-            
-            while time.time() < max_wait:
+            last_data_time = time.time()
+            hard_timeout = time.time() + 20  # safety guard
+
+            while True:
                 if self.shell.recv_ready():
-                    chunk = self.shell.recv(65535).decode('utf-8', errors='ignore')
-                    output += chunk
-                    time.sleep(0.3)
-                else:
-                    if output:
-                        time.sleep(0.5)
-                        if self.shell.recv_ready():
-                            continue
-                        break
-                    time.sleep(0.5)
-            
+                    data = self.shell.recv(65535).decode(
+                        "utf-8", errors="ignore"
+                    )
+                    output += data
+                    last_data_time = time.time()
+                    continue
+
+                now = time.time()
+
+                # EOF detection berbasis idle-time (KEY FIX)
+                if output and (now - last_data_time) >= 1.5:
+                    break
+
+                if now >= hard_timeout:
+                    logger.warning(
+                        f"SSH hard timeout for '{command}', returning output"
+                    )
+                    break
+
+                time.sleep(0.2)
+
             return self._clean_output(output, command)
-            
+
         except Exception as e:
-            logger.error(f"SSH execute error: {str(e)}")
+            logger.error(f"SSH execute error: {e}")
             return ""
     
     def _execute_telnet(self, command: str, wait_time: float) -> str:
