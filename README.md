@@ -1,4 +1,4 @@
-# BotLinkMaster v4.6.0
+# BotLinkMaster v4.6.1
 
 Bot Telegram untuk monitoring perangkat jaringan (router dan switch) dengan dukungan multi-vendor dan optical power monitoring.
 
@@ -330,18 +330,39 @@ sudo systemctl status botlinkmaster   # Status
 sudo journalctl -u botlinkmaster -f   # Log
 ```
 
-## Changelog
+## 📝 Changelog
 
-### v4.6.0 (Current)
-- ✅ Update command alternatif
-- ✅ Remove OLT support (akan di rilis v5.0.0)
-- ✅ Code cleanup dan optimization
+### v4.6.1 — Stabilitas MikroTik SSH
+**Release Type:** Bug Fix (Non-breaking)
 
-### v4.5.x
-- Multi-vendor support
-- Huawei SSH fix
-- Interface pagination
-- Timezone configuration
+#### Fixed
+- Memperbaiki masalah **partial SSH output pada perangkat MikroTik**
+  (contoh: hanya sebagian interface yang terbaca).
+- Mekanisme pembacaan output SSH kini menggunakan **idle-time based read**
+  untuk memastikan seluruh data diterima sebelum parsing.
+
+#### Improved
+- Stabilitas pengambilan data interface pada MikroTik dengan jumlah interface banyak.
+- Keandalan monitoring tanpa memerlukan konfigurasi tambahan di sisi perangkat.
+
+#### Notes
+- Tidak ada perubahan API.
+- Tidak memengaruhi vendor lain (Cisco, Huawei, Generic).
+- Aman untuk upgrade dari v4.6.1.
+  
+### v4.6.0 — Initial Stable Release
+**Release Type:** Stable
+
+#### Added
+- Dukungan multi-vendor (MikroTik, Cisco, Huawei, Generic).
+- Monitoring status interface (up/down).
+- Optical power monitoring (RX/TX).
+- Dukungan koneksi SSH dan Telnet.
+- Kompatibilitas dengan perangkat legacy.
+
+#### Notes
+- Fokus pada kestabilan dan kebutuhan operasional NOC.
+
 ## Update dari Versi Sebelumnya
 
 ### Step 1: Backup
