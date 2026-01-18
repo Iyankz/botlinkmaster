@@ -2,10 +2,24 @@
 
 Bot Telegram untuk monitoring perangkat jaringan (router dan switch) dengan dukungan multi-vendor dan optical power monitoring.
 
-[![GitHub release](https://img.shields.io/github/v/release/Iyankz/botlinkmaster)](https://github.com/Iyankz/botlinkmaster/releases)
-![Python](https://img.shields.io/badge/python-3.8+-green)
-![License](https://img.shields.io/badge/license-MIT-orange)
-![Ubuntu: 22.04+](https://img.shields.io/badge/Ubuntu-22.04+-orange.svg)
+![Release](https://img.shields.io/github/v/release/Iyankz/botlinkmaster?style=for-the-badge)
+![Release Date](https://img.shields.io/github/release-date/Iyankz/botlinkmaster?style=for-the-badge)
+![Last Commit](https://img.shields.io/github/last-commit/Iyankz/botlinkmaster?style=for-the-badge)
+![Stability](https://img.shields.io/badge/Release-Stable-success?style=for-the-badge)
+![Non Breaking](https://img.shields.io/badge/API-Non--Breaking-success?style=for-the-badge)
+![NOC Ready](https://img.shields.io/badge/NOC-Ready-critical?style=for-the-badge)
+![Python](https://img.shields.io/badge/Python-3.8%2B-blue?style=for-the-badge&logo=python)
+![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04%2B-orange?style=for-the-badge&logo=ubuntu)
+![Telegram Bot](https://img.shields.io/badge/Telegram-Bot-blue?style=for-the-badge&logo=telegram)
+![Protocol](https://img.shields.io/badge/Protocol-SSH%20%7C%20Telnet-darkgreen?style=for-the-badge)
+![Multi Vendor](https://img.shields.io/badge/Vendor-18%2B-success?style=for-the-badge)
+![License](https://img.shields.io/github/license/Iyankz/botlinkmaster?style=for-the-badge)
+
+
+
+![GitHub stars](https://img.shields.io/github/stars/Iyankz/botlinkmaster?style=for-the-badge)
+![GitHub issues](https://img.shields.io/github/issues/Iyankz/botlinkmaster?style=for-the-badge)
+
 
 ## Fitur Utama
 
