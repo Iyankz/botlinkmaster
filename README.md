@@ -16,11 +16,6 @@ Bot Telegram untuk monitoring perangkat jaringan (router dan switch) dengan duku
 ![License](https://img.shields.io/github/license/Iyankz/botlinkmaster?style=for-the-badge)
 
 
-
-![GitHub stars](https://img.shields.io/github/stars/Iyankz/botlinkmaster?style=for-the-badge)
-![GitHub issues](https://img.shields.io/github/issues/Iyankz/botlinkmaster?style=for-the-badge)
-
-
 ## Fitur Utama
 
 - ✅ **18 Vendor Support** - Cisco, Huawei, ZTE, Juniper, MikroTik, Nokia, dll
