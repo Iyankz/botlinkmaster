@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.6.0 - Telegram Bot
+BotLinkMaster v4.6.1 - Telegram Bot
 Network device monitoring with multi-vendor optical power support
 
 Note: OLT support will be available in v5.0.0
 
 Author: BotLinkMaster
-Version: 4.6.0
+Version: 4.6.1
 """
 
 import os
@@ -102,8 +102,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/device [nama] - Detail\n"
         "/delete [nama] - Hapus\n\n"
         "📡 MONITORING:\n"
-        "/interfaces [device] - List interface\n"
-        "/interfaces [device] [page] - Halaman\n"
+        "/int [device] - List interface\n"
+        "/int [device] [page] - Halaman\n"
         "/cek [device] [interface] - Status\n"
         "/redaman [device] [interface] - Optical\n\n"
         "⚙️ CONFIG:\n"
