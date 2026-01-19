@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.6.3 - Telegram Bot
+BotLinkMaster v4.7.0 - Telegram Bot
 Network device monitoring with multi-vendor optical power support
 
-IMPROVEMENT: Smart pagination - auto-show all if <=25 interfaces
+NEW v4.7.0: SFP Filter Feature
+- Filter to show only SFP interfaces with /interfaces [device] sfp
+- Supports all MikroTik SFP types: sfp, sfp-sfpplus, sfp28, qsfp28
+- Clean output for NOC monitoring
 
 Author: BotLinkMaster
-Version: 4.6.3
+Version: 4.7.0
 """
 
 import os
@@ -73,10 +76,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await update.message.reply_text(
-        f"🤖 BotLinkMaster v4.6.3\n"
+        f"🤖 BotLinkMaster v4.7.0\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"Bot monitoring perangkat jaringan.\n"
         f"Support 18 vendor router & switch.\n\n"
+        f"✨ NEW: SFP Filter\n"
+        f"   /interfaces [device] sfp\n\n"
         f"⏰ {tz_manager.get_current_time()}\n"
         f"🌍 {tz_manager.get_timezone()}\n\n"
         f"Ketik /help untuk bantuan."
@@ -88,7 +93,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await update.message.reply_text(
-        "🔧 BANTUAN BOTLINKMASTER v4.6.3\n"
+        "🔧 BANTUAN BOTLINKMASTER v4.7.0\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "📋 INFO:\n"
         "/start - Info bot\n"
@@ -103,6 +108,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/delete [nama] - Hapus\n\n"
         "📡 MONITORING:\n"
         "/interfaces [device] - List interface\n"
+        "/interfaces [device] sfp - SFP only\n"
         "/interfaces [device] [page] - Halaman\n"
         "/cek [device] [interface] - Status\n"
         "/redaman [device] [interface] - Optical\n\n"
@@ -360,21 +366,42 @@ async def list_interfaces(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text(
             "📡 LIST INTERFACE\n\n"
-            "Gunakan: /interfaces [device]\n"
-            "Atau: /interfaces [device] [page]\n\n"
+            "Gunakan:\n"
+            "/interfaces [device]\n"
+            "/interfaces [device] sfp\n"
+            "/interfaces [device] [page]\n\n"
+            "Filter 'sfp' hanya tampilkan:\n"
+            "  • sfp1, sfp2, ... (1Gbps)\n"
+            "  • sfp-sfpplus1, ... (10Gbps)\n"
+            "  • sfp28-1, ... (25Gbps)\n"
+            "  • qsfp28-1-1, ... (100Gbps)\n\n"
             "Contoh:\n"
-            "/interfaces router-1\n"
+            "/interfaces SW-SECAPA sfp\n"
             "/interfaces router-1 2"
         )
         return
     
     device_name = context.args[0]
     page = 1
+    filter_sfp = False
+    
+    # Parse second argument (could be 'sfp' or page number)
     if len(context.args) >= 2:
+        arg = context.args[1].lower()
+        if arg == 'sfp':
+            filter_sfp = True
+        else:
+            try:
+                page = max(1, int(arg))
+            except ValueError:
+                pass
+    
+    # Parse third argument (page number after 'sfp')
+    if len(context.args) >= 3 and filter_sfp:
         try:
-            page = max(1, int(context.args[1]))
+            page = max(1, int(context.args[2]))
         except ValueError:
-            page = 1
+            pass
     
     device = db.get_device(device_name)
     if not device:
@@ -407,6 +434,29 @@ async def list_interfaces(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
             
+            # ✨ FILTER SFP ONLY (if requested)
+            original_total = len(interfaces)
+            if filter_sfp:
+                # MikroTik SFP naming patterns:
+                # sfp1, sfp2, ... (1Gbps)
+                # sfp-sfpplus1, sfp-sfpplus2, ... (10Gbps)
+                # sfp28-1, sfp28-2, ... (25Gbps)
+                # qsfp28-1-1, qsfp28-1-2, ... (100Gbps)
+                sfp_patterns = [
+                    r'^sfp\d+$',              # sfp1, sfp2, etc
+                    r'^sfp-sfpplus\d+$',      # sfp-sfpplus1, etc
+                    r'^sfp28-\d+$',           # sfp28-1, etc
+                    r'^qsfp28-\d+-\d+$',      # qsfp28-1-1, etc
+                ]
+                
+                import re
+                interfaces = [
+                    iface for iface in interfaces
+                    if any(re.match(pattern, iface['name'], re.IGNORECASE) for pattern in sfp_patterns)
+                ]
+                
+                logger.info(f"SFP filter: {original_total} total → {len(interfaces)} SFP interfaces")
+            
             # ✨ SMART PAGINATION: Auto-show all if <= 25 interfaces
             per_page = 20
             total = len(interfaces)
@@ -427,6 +477,11 @@ async def list_interfaces(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             text = f"📡 INTERFACE {device_name}\n"
             text += "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            
+            # Show filter status
+            if filter_sfp:
+                text += f"🔍 Filter: SFP Only ({original_total} → {total})\n"
+            
             text += f"📊 Total: {total} | 🟢 Up: {up_count} | 🔴 Down: {down_count}\n"
             
             # Show pagination info only if total > 25
@@ -451,7 +506,10 @@ async def list_interfaces(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # Show navigation only if total > 25
             if total > 25 and total_pages > 1:
-                text += f"\n📄 Halaman lain: /interfaces {device_name} [1-{total_pages}]"
+                if filter_sfp:
+                    text += f"\n📄 /interfaces {device_name} sfp [1-{total_pages}]"
+                else:
+                    text += f"\n📄 /interfaces {device_name} [1-{total_pages}]"
             
             await msg.edit_text(text)
             
@@ -656,10 +714,12 @@ def main():
     app.add_error_handler(error_handler)
     
     print("\n" + "=" * 50)
-    print("BotLinkMaster v4.6.3 Started!")
+    print("BotLinkMaster v4.7.0 Started!")
     print("=" * 50)
     print(f"\nTimezone: {tz_manager.get_timezone()}")
     print(f"Time: {tz_manager.get_current_time()}")
+    print("\nNew in v4.7.0:")
+    print("  ✨ SFP Filter: /interfaces [device] sfp")
     print("\nNote: OLT support will be available in v5.0.0")
     print("\n[Press Ctrl+C to stop]\n")
     
