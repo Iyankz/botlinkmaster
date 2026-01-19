@@ -31,8 +31,8 @@ from dataclasses import dataclass
 from typing import Optional, List, Dict, Any, Tuple
 
 from vendor_commands import (
-    get_vendor_config, OpticalParser, expand_interface_name, 
-    get_optical_commands, parse_mikrotik_interfaces, parse_cisco_nxos_interfaces
+    get_vendor_config, OpticalParser, expand_interface_name,
+    get_optical_commands, parse_cisco_nxos_interfaces
 )
 
 logging.basicConfig(
@@ -62,6 +62,52 @@ class ConnectionConfig:
         if self.port is None:
             self.port = 22 if self.protocol == Protocol.SSH else 23
 
+def parse_mikrotik_interfaces(output: str) -> list:
+    """
+    MikroTik RouterOS parser
+    Handles:
+    - paging-safe output (without-paging)
+    - multiline format
+    - flags before name
+    - comments (;;;) as description
+    """
+    interfaces = []
+    lines = output.splitlines()
+
+    last_flags = ""
+    last_comment = ""
+
+    for line in lines:
+        line = line.rstrip()
+
+        # Match index + flags + comment
+        m = re.match(r'^\s*\d+\s+([A-Z ]*)\s*;;;?\s*(.*)$', line)
+        if m:
+            last_flags = m.group(1).strip()
+            last_comment = m.group(2).strip()
+            continue
+
+        # Match index + flags (no comment)
+        m = re.match(r'^\s*\d+\s+([A-Z ]+)$', line)
+        if m:
+            last_flags = m.group(1).strip()
+            last_comment = ""
+            continue
+
+        # Match name line
+        m = re.search(r'name="([^"]+)"', line)
+        if m:
+            flags = last_flags.replace(" ", "")
+            interfaces.append({
+                "name": m.group(1),
+                "status": "up" if "R" in flags else "down",
+                "flags": flags,
+                "description": last_comment,
+            })
+            last_flags = ""
+            last_comment = ""
+
+    return interfaces
 
 class BotLinkMaster:
     """Main class for network device connections and monitoring"""
@@ -450,69 +496,23 @@ class BotLinkMaster:
         return self._parse_default_interfaces(output if output else "")
     
     def _get_mikrotik_interfaces(self) -> List[Dict[str, Any]]:
-        """Get MikroTik interfaces with improved timeout and validation"""
-        
-        # First, get expected count
-        expected_count = self._get_mikrotik_interface_count()
-        if expected_count:
-            logger.info(f"MikroTik: Expected {expected_count} interfaces")
-        
-        commands = [
-            "/interface print brief",
-            "/interface print",
-        ]
-        
-        for cmd in commands:
-            logger.info(f"MikroTik: Trying {cmd}")
-            
-            # Use longer wait for MikroTik interface list
-            output = self.execute_command(cmd, wait_time=self.timeouts['initial_wait'])
-            
-            if output and re.search(r'^\s*\d+\s+', output, re.MULTILINE):
-                logger.info(f"MikroTik: Got {len(output)} bytes from {cmd}")
-                interfaces = parse_mikrotik_interfaces(output)
-                logger.info(f"MikroTik: Parsed {len(interfaces)} interfaces")
-                
-                # Log first and last interface for verification
-                if interfaces:
-                    logger.info(f"MikroTik: First interface: {interfaces[0]['name']}")
-                    logger.info(f"MikroTik: Last interface: {interfaces[-1]['name']}")
-                    
-                    # Validate count if we got expected count
-                    # Only retry if:
-                    # 1. Expected count seems reasonable (> 10)
-                    # 2. We got significantly less than expected (< 80%)
-                    # 3. Difference is substantial (>= 5 interfaces)
-                    if expected_count and expected_count > 10:
-                        ratio = len(interfaces) / expected_count
-                        diff = expected_count - len(interfaces)
-                        
-                        if ratio < 0.8 and diff >= 5:
-                            logger.warning(
-                                f"MikroTik: Only got {len(interfaces)}/{expected_count} interfaces "
-                                f"({ratio*100:.0f}%), difference: {diff}. Output may be truncated."
-                            )
-                            # Try with even longer timeout
-                            logger.info("MikroTik: Retrying with longer timeout...")
-                            output = self.execute_command(cmd, wait_time=self.timeouts['initial_wait'] + 2.0)
-                            if output:
-                                logger.info(f"MikroTik: Retry got {len(output)} bytes")
-                                interfaces_retry = parse_mikrotik_interfaces(output)
-                                if len(interfaces_retry) > len(interfaces):
-                                    logger.info(f"MikroTik: Retry improved! Got {len(interfaces_retry)} interfaces")
-                                    interfaces = interfaces_retry
-                        else:
-                            logger.info(
-                                f"MikroTik: Count difference acceptable "
-                                f"({len(interfaces)}/{expected_count}, ratio: {ratio*100:.0f}%)"
-                            )
-                    elif expected_count and expected_count <= 10:
-                        logger.info(
-                            f"MikroTik: count-only returned {expected_count}, which seems too low. "
-                            f"Trusting parser result of {len(interfaces)} interfaces."
-                        )
-                
-                return interfaces
+        logger.info("MikroTik: Using ethernet detail without paging")
+
+        cmd = "/interface ethernet print detail without-paging"
+        output = self.execute_command(cmd, wait_time=3.5)
+
+        if not output:
+            logger.warning("MikroTik: No output received")
+            return []
+
+        interfaces = parse_mikrotik_interfaces(output)
+        logger.info(f"MikroTik: Parsed {len(interfaces)} interfaces")
+
+        if interfaces:
+            logger.info(f"First interface: {interfaces[0]['name']}")
+            logger.info(f"Last interface: {interfaces[-1]['name']}")
+
+            return interfaces
         
         return []
     
