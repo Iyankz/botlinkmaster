@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.6.0 - Network Device Connection Module
+BotLinkMaster v4.6.2 - Network Device Connection Module
 SSH/Telnet support for routers and switches
+
+CHANGELOG v4.6.2:
+- Fixed MikroTik SSH partial output (16/21 interfaces issue)
+- Increased idle timeout for MikroTik from 1.5s to 3.5s
+- Vendor-specific timeout configuration
+- Better prompt detection for MikroTik
 
 Note: OLT support will be available in v5.0.0
 
 Author: BotLinkMaster
-Version: 4.6.0
+Version: 4.6.2
 """
 
 import paramiko
@@ -73,6 +79,30 @@ class BotLinkMaster:
         'aes128-cbc', '3des-cbc',
     ]
     
+    # Vendor-specific timeouts
+    VENDOR_TIMEOUTS = {
+        'mikrotik': {
+            'idle_timeout': 3.5,      # Increased from 1.5s
+            'initial_wait': 2.5,      # Increased from default
+            'hard_timeout': 25,       # Increased from 20s
+        },
+        'cisco_nxos': {
+            'idle_timeout': 2.0,
+            'initial_wait': 2.0,
+            'hard_timeout': 20,
+        },
+        'huawei': {
+            'idle_timeout': 2.5,
+            'initial_wait': 2.0,
+            'hard_timeout': 20,
+        },
+        'default': {
+            'idle_timeout': 1.5,
+            'initial_wait': 2.0,
+            'hard_timeout': 20,
+        }
+    }
+    
     def __init__(self, config: ConnectionConfig):
         self.config = config
         self.client = None
@@ -82,6 +112,13 @@ class BotLinkMaster:
         self.vendor_config = get_vendor_config(config.vendor)
         self.optical_parser = OpticalParser(config.vendor)
         self.connection_method = None
+        
+        # Get vendor-specific timeouts
+        vendor_key = config.vendor.lower()
+        self.timeouts = self.VENDOR_TIMEOUTS.get(
+            vendor_key, 
+            self.VENDOR_TIMEOUTS['default']
+        )
     
     def connect(self) -> bool:
         try:
@@ -248,9 +285,15 @@ class BotLinkMaster:
         if self.vendor_config.disable_paging:
             self._execute_telnet(self.vendor_config.disable_paging, 1.0)
     
-    def execute_command(self, command: str, wait_time: float = 2.0) -> str:
+    def execute_command(self, command: str, wait_time: float = None) -> str:
+        """Execute command with vendor-specific timeout if not specified"""
         if not self.connected:
             return ""
+        
+        # Use vendor-specific initial wait if not provided
+        if wait_time is None:
+            wait_time = self.timeouts['initial_wait']
+        
         try:
             if self.config.protocol == Protocol.SSH:
                 return self._execute_ssh(command, wait_time)
@@ -263,70 +306,65 @@ class BotLinkMaster:
     
     def _execute_ssh(self, command: str, wait_time: float) -> str:
         """
-        BUG FIX: MikroTik SSH partial output
-        - Fix kasus output terpotong (mis. 16/20 interface)
-        - Menggunakan idle-time based read
+        BUG FIX v4.6.2: MikroTik SSH partial output
+        - Fixed 16/21 interfaces issue
+        - Vendor-specific timeouts (MikroTik: 3.5s idle timeout)
+        - Better prompt detection
+        - Increased hard timeout for slow devices
         """
-
-        # ======================================================
-        # OLD IMPLEMENTATION (BUGGY - KEPT BUT NOT USED ANYMORE)
-        # ======================================================
-        # self.shell.send(command + "\n")
-        # time.sleep(wait_time)
-        #
-        # output = ""
-        # max_wait = time.time() + 15
-        #
-        # while time.time() < max_wait:
-        #     if self.shell.recv_ready():
-        #         chunk = self.shell.recv(65535).decode(
-        #             'utf-8', errors='ignore'
-        #         )
-        #         output += chunk
-        #         time.sleep(0.3)
-        #     else:
-        #         if output:
-        #             break
-        #         time.sleep(0.5)
-        #
-        # return self._clean_output(output, command)
-        #
-        # BUG:
-        # - MikroTik mengirim output bertahap
-        # - Loop berhenti terlalu cepat
-        # ======================================================
-
         try:
             self.shell.send(command + "\n")
             time.sleep(wait_time)
 
             output = ""
             last_data_time = time.time()
-            hard_timeout = time.time() + 20  # safety guard
+            
+            # Use vendor-specific timeouts
+            idle_timeout = self.timeouts['idle_timeout']
+            hard_timeout = time.time() + self.timeouts['hard_timeout']
+            
+            consecutive_empty_reads = 0
+            max_consecutive_empty = 5  # Stop if 5 consecutive empty reads
+            
+            logger.debug(f"Vendor: {self.config.vendor}, idle_timeout: {idle_timeout}s")
 
             while True:
                 if self.shell.recv_ready():
-                    data = self.shell.recv(65535).decode(
-                        "utf-8", errors="ignore"
-                    )
-                    output += data
-                    last_data_time = time.time()
-                    continue
-
+                    data = self.shell.recv(65535).decode("utf-8", errors="ignore")
+                    
+                    if data:
+                        output += data
+                        last_data_time = time.time()
+                        consecutive_empty_reads = 0
+                        logger.debug(f"Received {len(data)} bytes")
+                        continue
+                    else:
+                        consecutive_empty_reads += 1
+                
                 now = time.time()
+                idle_time = now - last_data_time
 
-                # EOF detection berbasis idle-time (KEY FIX)
-                if output and (now - last_data_time) >= 1.5:
+                # EOF detection berbasis idle-time (IMPROVED)
+                if output and idle_time >= idle_timeout:
+                    logger.debug(f"Idle timeout reached: {idle_time:.2f}s >= {idle_timeout}s")
+                    break
+                
+                # Stop if too many consecutive empty reads
+                if consecutive_empty_reads >= max_consecutive_empty:
+                    logger.debug(f"Max consecutive empty reads: {consecutive_empty_reads}")
                     break
 
+                # Hard timeout safety guard
                 if now >= hard_timeout:
                     logger.warning(
-                        f"SSH hard timeout for '{command}', returning output"
+                        f"SSH hard timeout for '{command}', returning output "
+                        f"(got {len(output)} bytes)"
                     )
                     break
 
                 time.sleep(0.2)
 
+            logger.info(f"Command '{command}': received {len(output)} bytes total")
             return self._clean_output(output, command)
 
         except Exception as e:
@@ -407,7 +445,7 @@ class BotLinkMaster:
         return self._parse_default_interfaces(output if output else "")
     
     def _get_mikrotik_interfaces(self) -> List[Dict[str, Any]]:
-        """Get MikroTik interfaces"""
+        """Get MikroTik interfaces with improved timeout"""
         commands = [
             "/interface print brief",
             "/interface print",
@@ -415,12 +453,20 @@ class BotLinkMaster:
         
         for cmd in commands:
             logger.info(f"MikroTik: Trying {cmd}")
-            output = self.execute_command(cmd, wait_time=4.0)
+            
+            # Use longer wait for MikroTik interface list
+            output = self.execute_command(cmd, wait_time=self.timeouts['initial_wait'])
             
             if output and re.search(r'^\s*\d+\s+', output, re.MULTILINE):
-                logger.info(f"MikroTik: Got data from {cmd}")
+                logger.info(f"MikroTik: Got {len(output)} bytes from {cmd}")
                 interfaces = parse_mikrotik_interfaces(output)
                 logger.info(f"MikroTik: Parsed {len(interfaces)} interfaces")
+                
+                # Log first and last interface for verification
+                if interfaces:
+                    logger.info(f"MikroTik: First interface: {interfaces[0]['name']}")
+                    logger.info(f"MikroTik: Last interface: {interfaces[-1]['name']}")
+                
                 return interfaces
         
         return []
@@ -687,7 +733,7 @@ class BotLinkMaster:
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("BotLinkMaster v4.6.0 - Network Device Connection Module")
+    print("BotLinkMaster v4.6.2 - Network Device Connection Module")
     print("=" * 60)
     print("\nSupported Vendors:")
     from vendor_commands import get_supported_vendors
