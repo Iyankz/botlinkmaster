@@ -1,4 +1,4 @@
-# BotLinkMaster v4.6.1
+# BotLinkMaster v4.7.0
 
 Bot Telegram untuk monitoring perangkat jaringan (router dan switch) dengan dukungan multi-vendor dan optical power monitoring.
 
