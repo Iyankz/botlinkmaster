@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.6.1 - Telegram Bot
+BotLinkMaster v4.6.3 - Telegram Bot
 Network device monitoring with multi-vendor optical power support
 
-Note: OLT support will be available in v5.0.0
+IMPROVEMENT: Smart pagination - auto-show all if <=25 interfaces
 
 Author: BotLinkMaster
-Version: 4.6.1
+Version: 4.6.3
 """
 
 import os
@@ -73,7 +73,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await update.message.reply_text(
-        f"🤖 BotLinkMaster v4.6.0\n"
+        f"🤖 BotLinkMaster v4.6.3\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"Bot monitoring perangkat jaringan.\n"
         f"Support 18 vendor router & switch.\n\n"
@@ -88,7 +88,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await update.message.reply_text(
-        "🔧 BANTUAN BOTLINKMASTER v4.6.0\n"
+        "🔧 BANTUAN BOTLINKMASTER v4.6.3\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "📋 INFO:\n"
         "/start - Info bot\n"
@@ -407,8 +407,15 @@ async def list_interfaces(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
             
+            # ✨ SMART PAGINATION: Auto-show all if <= 25 interfaces
             per_page = 20
             total = len(interfaces)
+            
+            # If total <= 25, show all in one page (no pagination)
+            if total <= 25:
+                per_page = total
+                page = 1
+            
             total_pages = (total + per_page - 1) // per_page
             page = min(page, total_pages)
             
@@ -421,7 +428,11 @@ async def list_interfaces(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = f"📡 INTERFACE {device_name}\n"
             text += "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             text += f"📊 Total: {total} | 🟢 Up: {up_count} | 🔴 Down: {down_count}\n"
-            text += f"📄 Halaman {page}/{total_pages}\n"
+            
+            # Show pagination info only if total > 25
+            if total > 25:
+                text += f"📄 Halaman {page}/{total_pages}\n"
+            
             text += "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             
             for iface in interfaces[start:end]:
@@ -438,7 +449,8 @@ async def list_interfaces(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     desc = iface['description'][:30]
                     text += f"   {desc}\n"
             
-            if total_pages > 1:
+            # Show navigation only if total > 25
+            if total > 25 and total_pages > 1:
                 text += f"\n📄 Halaman lain: /interfaces {device_name} [1-{total_pages}]"
             
             await msg.edit_text(text)
@@ -620,7 +632,7 @@ def main():
         print("ERROR: TELEGRAM_BOT_TOKEN tidak ditemukan di .env")
         return
     
-    logger.info("Starting BotLinkMaster v4.6.0...")
+    logger.info("Starting BotLinkMaster v4.6.3...")
     
     app = Application.builder().token(token).build()
     
@@ -644,7 +656,7 @@ def main():
     app.add_error_handler(error_handler)
     
     print("\n" + "=" * 50)
-    print("BotLinkMaster v4.6.0 Started!")
+    print("BotLinkMaster v4.6.3 Started!")
     print("=" * 50)
     print(f"\nTimezone: {tz_manager.get_timezone()}")
     print(f"Time: {tz_manager.get_current_time()}")
