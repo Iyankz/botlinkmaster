@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.6.2 - Network Device Connection Module
+BotLinkMaster v4.6.3 - Network Device Connection Module
 SSH/Telnet support for routers and switches
+
+CHANGELOG v4.6.3:
+- Increased MikroTik timeout: 3.5s → 5.5s idle, 2.5s → 3.5s initial wait
+- Added interface count validation (/interface print count-only)
+- Automatic retry with longer timeout if count mismatch
+- Better logging for troubleshooting
 
 CHANGELOG v4.6.2:
 - Fixed MikroTik SSH partial output (16/21 interfaces issue)
@@ -12,7 +18,7 @@ CHANGELOG v4.6.2:
 Note: OLT support will be available in v5.0.0
 
 Author: BotLinkMaster
-Version: 4.6.2
+Version: 4.6.3
 """
 
 import paramiko
@@ -82,9 +88,9 @@ class BotLinkMaster:
     # Vendor-specific timeouts
     VENDOR_TIMEOUTS = {
         'mikrotik': {
-            'idle_timeout': 3.5,      # Increased from 1.5s
-            'initial_wait': 2.5,      # Increased from default
-            'hard_timeout': 25,       # Increased from 20s
+            'idle_timeout': 5.5,      # Increased from 3.5s for slow devices
+            'initial_wait': 3.5,      # Increased from 2.5s
+            'hard_timeout': 30,       # Increased from 25s
         },
         'cisco_nxos': {
             'idle_timeout': 2.0,
@@ -445,7 +451,13 @@ class BotLinkMaster:
         return self._parse_default_interfaces(output if output else "")
     
     def _get_mikrotik_interfaces(self) -> List[Dict[str, Any]]:
-        """Get MikroTik interfaces with improved timeout"""
+        """Get MikroTik interfaces with improved timeout and validation"""
+        
+        # First, get expected count
+        expected_count = self._get_mikrotik_interface_count()
+        if expected_count:
+            logger.info(f"MikroTik: Expected {expected_count} interfaces")
+        
         commands = [
             "/interface print brief",
             "/interface print",
@@ -466,10 +478,44 @@ class BotLinkMaster:
                 if interfaces:
                     logger.info(f"MikroTik: First interface: {interfaces[0]['name']}")
                     logger.info(f"MikroTik: Last interface: {interfaces[-1]['name']}")
+                    
+                    # Validate count if we got expected count
+                    if expected_count and len(interfaces) < expected_count:
+                        logger.warning(
+                            f"MikroTik: Only got {len(interfaces)}/{expected_count} interfaces! "
+                            f"Output may be truncated."
+                        )
+                        # Try with even longer timeout
+                        logger.info("MikroTik: Retrying with longer timeout...")
+                        output = self.execute_command(cmd, wait_time=self.timeouts['initial_wait'] + 2.0)
+                        if output:
+                            logger.info(f"MikroTik: Retry got {len(output)} bytes")
+                            interfaces_retry = parse_mikrotik_interfaces(output)
+                            if len(interfaces_retry) > len(interfaces):
+                                logger.info(f"MikroTik: Retry improved! Got {len(interfaces_retry)} interfaces")
+                                interfaces = interfaces_retry
                 
                 return interfaces
         
         return []
+    
+    def _get_mikrotik_interface_count(self) -> int:
+        """Get expected interface count from MikroTik"""
+        try:
+            cmd = "/interface print count-only"
+            output = self.execute_command(cmd, wait_time=2.0)
+            
+            if output:
+                # Output should be just a number
+                match = re.search(r'(\d+)', output)
+                if match:
+                    count = int(match.group(1))
+                    logger.info(f"MikroTik: count-only returned {count}")
+                    return count
+        except Exception as e:
+            logger.warning(f"MikroTik: Failed to get count: {e}")
+        
+        return 0
     
     def _parse_default_interfaces(self, output: str) -> List[Dict[str, Any]]:
         """Default interface parsing"""
@@ -733,7 +779,7 @@ class BotLinkMaster:
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("BotLinkMaster v4.6.2 - Network Device Connection Module")
+    print("BotLinkMaster v4.6.3 - Network Device Connection Module")
     print("=" * 60)
     print("\nSupported Vendors:")
     from vendor_commands import get_supported_vendors
