@@ -229,29 +229,44 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
     Vendor.MIKROTIK.value: VendorConfig(
         name="MikroTik RouterOS",
         disable_paging="",
-        show_interface="/interface ethernet print detail where name={interface}",
-        show_interface_brief="/interface ethernet print detail without-paging",
-        show_interface_status="/interface ethernet print detail without-paging",
-        show_interface_description="/interface ethernet print detail without-paging",
+        show_interface="/interface print detail where name={interface}",
+        show_interface_brief="/interface print brief",
+        show_interface_status="/interface print brief",
+        show_interface_description="/interface print brief",
         show_optical_all="/interface ethernet monitor [find] once",
-        show_optical_interface="/interface ethernet monitor {interface} once",
-        show_optical_detail="/interface ethernet monitor {interface} once",
+        show_optical_interface="interface/ethernet/monitor {interface} once",
+        show_optical_detail="interface/ethernet/monitor {interface} once",
+        alt_optical_commands=[
+            "/interface ethernet monitor {interface}",
+            "interface/ethernet/monitor {interface} once",
+            "/interface ethernet monitor {interface} once",
+        ],
         alt_interface_commands=[
-            "/interface ethernet print detail without-paging",
+            "/interface print brief",
+            "/interface print",
         ],
         interface_parser="mikrotik",
         rx_power_patterns=[
+            r"sfp-rx-power[:\s]+(-?\d+\.?\d*)\s*dBm",
             r"sfp-rx-power[:\s]+(-?\d+\.?\d*)",
         ],
         tx_power_patterns=[
+            r"sfp-tx-power[:\s]+(-?\d+\.?\d*)\s*dBm",
             r"sfp-tx-power[:\s]+(-?\d+\.?\d*)",
         ],
-        status_up_patterns=[r"running=yes"],
-        status_down_patterns=[r"running=no", r"disabled=yes"],
+        status_up_patterns=[
+            r"status[:\s]+link-ok",
+            r"running=yes",
+        ],
+        status_down_patterns=[
+            r"status[:\s]+no-link",
+            r"running=no",
+            r"disabled=yes",
+        ],
         description_pattern=r"comment[:\s]+(.+?)(?:\n|$)",
-        notes="MikroTik RouterOS - Fixed paging + multiline parser",
+        notes="MikroTik RouterOS - Flags: R=RUNNING, S=SLAVE, X=DISABLED",
     ),
-
+    
     # ==========================================================================
     # NOKIA SR-OS
     # ==========================================================================
