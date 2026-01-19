@@ -1,24 +1,23 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.6.3 - Network Device Connection Module
+BotLinkMaster v4.6.4 - Network Device Connection Module
 SSH/Telnet support for routers and switches
+
+CHANGELOG v4.6.4:
+- Improved count-only parsing (more robust, debug logging)
+- Smarter retry logic (only retry if count seems reliable)
+- Skip validation if count-only returns suspiciously low number
+- Better logging for troubleshooting count mismatches
 
 CHANGELOG v4.6.3:
 - Increased MikroTik timeout: 3.5s → 5.5s idle, 2.5s → 3.5s initial wait
 - Added interface count validation (/interface print count-only)
 - Automatic retry with longer timeout if count mismatch
-- Better logging for troubleshooting
-
-CHANGELOG v4.6.2:
-- Fixed MikroTik SSH partial output (16/21 interfaces issue)
-- Increased idle timeout for MikroTik from 1.5s to 3.5s
-- Vendor-specific timeout configuration
-- Better prompt detection for MikroTik
 
 Note: OLT support will be available in v5.0.0
 
 Author: BotLinkMaster
-Version: 4.6.3
+Version: 4.6.4
 """
 
 import paramiko
@@ -480,20 +479,38 @@ class BotLinkMaster:
                     logger.info(f"MikroTik: Last interface: {interfaces[-1]['name']}")
                     
                     # Validate count if we got expected count
-                    if expected_count and len(interfaces) < expected_count:
-                        logger.warning(
-                            f"MikroTik: Only got {len(interfaces)}/{expected_count} interfaces! "
-                            f"Output may be truncated."
+                    # Only retry if:
+                    # 1. Expected count seems reasonable (> 10)
+                    # 2. We got significantly less than expected (< 80%)
+                    # 3. Difference is substantial (>= 5 interfaces)
+                    if expected_count and expected_count > 10:
+                        ratio = len(interfaces) / expected_count
+                        diff = expected_count - len(interfaces)
+                        
+                        if ratio < 0.8 and diff >= 5:
+                            logger.warning(
+                                f"MikroTik: Only got {len(interfaces)}/{expected_count} interfaces "
+                                f"({ratio*100:.0f}%), difference: {diff}. Output may be truncated."
+                            )
+                            # Try with even longer timeout
+                            logger.info("MikroTik: Retrying with longer timeout...")
+                            output = self.execute_command(cmd, wait_time=self.timeouts['initial_wait'] + 2.0)
+                            if output:
+                                logger.info(f"MikroTik: Retry got {len(output)} bytes")
+                                interfaces_retry = parse_mikrotik_interfaces(output)
+                                if len(interfaces_retry) > len(interfaces):
+                                    logger.info(f"MikroTik: Retry improved! Got {len(interfaces_retry)} interfaces")
+                                    interfaces = interfaces_retry
+                        else:
+                            logger.info(
+                                f"MikroTik: Count difference acceptable "
+                                f"({len(interfaces)}/{expected_count}, ratio: {ratio*100:.0f}%)"
+                            )
+                    elif expected_count and expected_count <= 10:
+                        logger.info(
+                            f"MikroTik: count-only returned {expected_count}, which seems too low. "
+                            f"Trusting parser result of {len(interfaces)} interfaces."
                         )
-                        # Try with even longer timeout
-                        logger.info("MikroTik: Retrying with longer timeout...")
-                        output = self.execute_command(cmd, wait_time=self.timeouts['initial_wait'] + 2.0)
-                        if output:
-                            logger.info(f"MikroTik: Retry got {len(output)} bytes")
-                            interfaces_retry = parse_mikrotik_interfaces(output)
-                            if len(interfaces_retry) > len(interfaces):
-                                logger.info(f"MikroTik: Retry improved! Got {len(interfaces_retry)} interfaces")
-                                interfaces = interfaces_retry
                 
                 return interfaces
         
@@ -506,11 +523,28 @@ class BotLinkMaster:
             output = self.execute_command(cmd, wait_time=2.0)
             
             if output:
-                # Output should be just a number
-                match = re.search(r'(\d+)', output)
+                # Log raw output for debugging
+                logger.debug(f"MikroTik count-only raw output: {repr(output)}")
+                
+                # Try to find a standalone number (likely the count)
+                # Look for number at end of line or standalone
+                lines = output.strip().split('\n')
+                for line in reversed(lines):  # Check from bottom up
+                    line = line.strip()
+                    # Skip empty lines and prompts
+                    if not line or line.endswith('>') or line.endswith('#'):
+                        continue
+                    # Try to parse as number
+                    if line.isdigit():
+                        count = int(line)
+                        logger.info(f"MikroTik: count-only returned {count}")
+                        return count
+                
+                # Fallback: find any number
+                match = re.search(r'\b(\d+)\b', output)
                 if match:
                     count = int(match.group(1))
-                    logger.info(f"MikroTik: count-only returned {count}")
+                    logger.warning(f"MikroTik: count-only fallback parsing: {count} (may be inaccurate)")
                     return count
         except Exception as e:
             logger.warning(f"MikroTik: Failed to get count: {e}")
