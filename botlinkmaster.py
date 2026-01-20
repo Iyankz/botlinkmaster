@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.6.4 - Network Device Connection Module
+BotLinkMaster v4.8.0 - Network Device Connection Module
 SSH/Telnet support for routers and switches
 
-CHANGELOG v4.6.4:
-- Improved count-only parsing (more robust, debug logging)
-- Smarter retry logic (only retry if count seems reliable)
-- Skip validation if count-only returns suspiciously low number
-- Better logging for troubleshooting count mismatches
+CHANGELOG v4.8.0:
+- NEW: Improved MikroTik parser for 'detail' format
+- Support for MikroTik flags (R=Running, S=Slave, X=Disabled)
+- Better comment/description parsing with ;;; delimiter
+- Use '/interface ethernet print detail without-paging' for reliability
+- Accurate status detection from flags
+- Fixes interface count issues (now correctly detects all interfaces)
 
-CHANGELOG v4.6.3:
-- Increased MikroTik timeout: 3.5s → 5.5s idle, 2.5s → 3.5s initial wait
-- Added interface count validation (/interface print count-only)
-- Automatic retry with longer timeout if count mismatch
+CHANGELOG v4.7.0:
+- SFP Filter Feature: /interfaces [device] sfp
+- Support all MikroTik SFP types (1G, 10G, 25G, 100G)
 
 Note: OLT support will be available in v5.0.0
 
 Author: BotLinkMaster
-Version: 4.6.4
+Version: 4.8.0
 """
 
 import paramiko
@@ -449,6 +450,72 @@ class BotLinkMaster:
         # Fallback to default parsing
         return self._parse_default_interfaces(output if output else "")
     
+    def _parse_mikrotik_detail_output(self, output: str) -> List[Dict[str, Any]]:
+        """
+        Parse MikroTik 'interface ethernet print detail without-paging' output
+        
+        Format:
+         1 RS ;;; link Utara 96
+              name="sfp-sfpplus1" default-name="sfp-sfpplus1" ...
+        
+        Where:
+        - 1 = Index
+        - RS = Flags (R=Running/UP, S=Slave, X=Disabled)
+        - ;;; = Comment delimiter
+        - link Utara 96 = Description/comment
+        - name="sfp-sfpplus1" = Interface name on next line
+        """
+        interfaces = []
+        lines = output.split('\n')
+        
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            
+            # Check if line starts with index number (e.g., "1 RS ;;; description")
+            # Pattern: digit(s) followed by optional flags and optional comment
+            match = re.match(r'^(\d+)\s*([XRSD]*)\s*(?:;;;(.*))?$', line)
+            
+            if match:
+                index = match.group(1)
+                flags = match.group(2) if match.group(2) else ''
+                comment = match.group(3).strip() if match.group(3) else ''
+                
+                # Next line should contain name="interface-name"
+                i += 1
+                if i < len(lines):
+                    next_line = lines[i].strip()
+                    name_match = re.search(r'name="([^"]+)"', next_line)
+                    
+                    if name_match:
+                        name = name_match.group(1)
+                        
+                        # Determine status from flags
+                        # R = Running (UP)
+                        # S = Slave
+                        # X = Disabled (DOWN)
+                        # RS = Running + Slave (UP)
+                        if 'R' in flags:
+                            status = 'up'
+                        elif 'X' in flags:
+                            status = 'down'
+                        else:
+                            # No R flag and no X flag = DOWN
+                            status = 'down'
+                        
+                        interfaces.append({
+                            'name': name,
+                            'status': status,
+                            'flags': flags,
+                            'description': comment,
+                            'index': index
+                        })
+            
+            i += 1
+        
+        logger.info(f"MikroTik detail parser: Found {len(interfaces)} interfaces")
+        return interfaces
+    
     def _get_mikrotik_interfaces(self) -> List[Dict[str, Any]]:
         """Get MikroTik interfaces with improved timeout and validation"""
         
@@ -457,7 +524,10 @@ class BotLinkMaster:
         if expected_count:
             logger.info(f"MikroTik: Expected {expected_count} interfaces")
         
+        # Use 'detail without-paging' for most reliable output
         commands = [
+            "/interface ethernet print detail without-paging",
+            "/interface print detail without-paging",
             "/interface print brief",
             "/interface print",
         ]
@@ -470,7 +540,15 @@ class BotLinkMaster:
             
             if output and re.search(r'^\s*\d+\s+', output, re.MULTILINE):
                 logger.info(f"MikroTik: Got {len(output)} bytes from {cmd}")
-                interfaces = parse_mikrotik_interfaces(output)
+                
+                # Use detail parser for 'detail' commands, regular parser for others
+                if 'detail' in cmd.lower():
+                    interfaces = self._parse_mikrotik_detail_output(output)
+                    logger.info(f"MikroTik: Using detail parser")
+                else:
+                    interfaces = parse_mikrotik_interfaces(output)
+                    logger.info(f"MikroTik: Using standard parser")
+                
                 logger.info(f"MikroTik: Parsed {len(interfaces)} interfaces")
                 
                 # Log first and last interface for verification
@@ -497,7 +575,13 @@ class BotLinkMaster:
                             output = self.execute_command(cmd, wait_time=self.timeouts['initial_wait'] + 2.0)
                             if output:
                                 logger.info(f"MikroTik: Retry got {len(output)} bytes")
-                                interfaces_retry = parse_mikrotik_interfaces(output)
+                                
+                                # Use same parser as before
+                                if 'detail' in cmd.lower():
+                                    interfaces_retry = self._parse_mikrotik_detail_output(output)
+                                else:
+                                    interfaces_retry = parse_mikrotik_interfaces(output)
+                                
                                 if len(interfaces_retry) > len(interfaces):
                                     logger.info(f"MikroTik: Retry improved! Got {len(interfaces_retry)} interfaces")
                                     interfaces = interfaces_retry
@@ -813,7 +897,7 @@ class BotLinkMaster:
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("BotLinkMaster v4.6.3 - Network Device Connection Module")
+    print("BotLinkMaster v4.8.0 - Network Device Connection Module")
     print("=" * 60)
     print("\nSupported Vendors:")
     from vendor_commands import get_supported_vendors
