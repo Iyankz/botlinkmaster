@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.8.1 - Network Device Connection Module
+BotLinkMaster v4.8.2 - Network Device Connection Module
 SSH/Telnet support for routers and switches
+
+CHANGELOG v4.8.2:
+- FIX: sfp-sfpplus16 missing issue
+- Increased MikroTik timeouts to ensure all interfaces are captured
+- Better handling of last line in SSH output
 
 CHANGELOG v4.8.1:
 - FIX: MikroTik interface count issue
@@ -17,7 +22,7 @@ CHANGELOG v4.8.0:
 Note: OLT support will be available in v5.0.0
 
 Author: BotLinkMaster
-Version: 4.8.1
+Version: 4.8.2
 """
 
 import paramiko
@@ -84,12 +89,12 @@ class BotLinkMaster:
         'aes128-cbc', '3des-cbc',
     ]
     
-    # Vendor-specific timeouts
+    # Vendor-specific timeouts - FIXED v4.8.2
     VENDOR_TIMEOUTS = {
         'mikrotik': {
-            'idle_timeout': 5.5,
-            'initial_wait': 3.5,
-            'hard_timeout': 30,
+            'idle_timeout': 6.5,      # Increased from 5.5 - ensure last interface captured
+            'initial_wait': 4.5,      # Increased from 3.5
+            'hard_timeout': 40,       # Increased from 30
         },
         'cisco_nxos': {
             'idle_timeout': 2.0,
@@ -304,7 +309,7 @@ class BotLinkMaster:
             return ""
     
     def _execute_ssh(self, command: str, wait_time: float) -> str:
-        """Execute SSH command with idle-time based reading"""
+        """Execute SSH command with idle-time based reading - FIXED v4.8.2"""
         try:
             self.shell.send(command + "\n")
             time.sleep(wait_time)
@@ -316,7 +321,7 @@ class BotLinkMaster:
             hard_timeout = time.time() + self.timeouts['hard_timeout']
             
             consecutive_empty_reads = 0
-            max_consecutive_empty = 5
+            max_consecutive_empty = 8  # Increased from 5 to ensure last data captured
 
             while True:
                 if self.shell.recv_ready():
@@ -334,6 +339,13 @@ class BotLinkMaster:
                 idle_time = now - last_data_time
 
                 if output and idle_time >= idle_timeout:
+                    # Extra wait to ensure we got everything
+                    time.sleep(0.5)
+                    if self.shell.recv_ready():
+                        extra = self.shell.recv(65535).decode("utf-8", errors="ignore")
+                        if extra:
+                            output += extra
+                            logger.info(f"SSH: Captured extra {len(extra)} bytes after idle timeout")
                     break
                 
                 if consecutive_empty_reads >= max_consecutive_empty:
@@ -422,11 +434,13 @@ class BotLinkMaster:
     
     def _get_mikrotik_interfaces(self) -> List[Dict[str, Any]]:
         """
-        Get MikroTik interfaces - FIXED v4.8.1
+        Get MikroTik interfaces - FIXED v4.8.2
         
         IMPORTANT: Use /interface print brief FIRST to get ALL interface types.
         /interface ethernet print only shows ethernet/SFP interfaces,
         missing ether, bridge, vlan, bonding, etc.
+        
+        v4.8.2: Increased timeouts and added retry to capture all interfaces
         """
         
         expected_count = self._get_mikrotik_interface_count()
@@ -444,6 +458,7 @@ class BotLinkMaster:
         for cmd in commands:
             logger.info(f"MikroTik: Trying {cmd}")
             
+            # v4.8.2: Use longer wait time
             output = self.execute_command(cmd, wait_time=self.timeouts['initial_wait'])
             
             if output and re.search(r'^\s*\d+\s+', output, re.MULTILINE):
@@ -457,26 +472,27 @@ class BotLinkMaster:
                     logger.info(f"MikroTik: First interface: {interfaces[0]['name']}")
                     logger.info(f"MikroTik: Last interface: {interfaces[-1]['name']}")
                     
-                    # Validate count
-                    if expected_count and expected_count > 10:
-                        ratio = len(interfaces) / expected_count
-                        diff = expected_count - len(interfaces)
+                    # v4.8.2: More aggressive retry if count doesn't match
+                    if expected_count and len(interfaces) < expected_count:
+                        missing = expected_count - len(interfaces)
+                        logger.warning(
+                            f"MikroTik: Missing {missing} interfaces "
+                            f"({len(interfaces)}/{expected_count}). Retrying with longer timeout..."
+                        )
                         
-                        if ratio < 0.8 and diff >= 5:
-                            logger.warning(
-                                f"MikroTik: Only got {len(interfaces)}/{expected_count} interfaces "
-                                f"({ratio*100:.0f}%). Retrying with longer timeout..."
-                            )
-                            output = self.execute_command(cmd, wait_time=self.timeouts['initial_wait'] + 2.0)
-                            if output:
-                                interfaces_retry = parse_mikrotik_interfaces(output)
-                                if len(interfaces_retry) > len(interfaces):
-                                    logger.info(f"MikroTik: Retry improved! Got {len(interfaces_retry)} interfaces")
-                                    interfaces = interfaces_retry
-                        else:
-                            logger.info(
-                                f"MikroTik: Count OK ({len(interfaces)}/{expected_count}, ratio: {ratio*100:.0f}%)"
-                            )
+                        # Retry with longer timeout
+                        time.sleep(1.0)  # Extra delay before retry
+                        output_retry = self.execute_command(cmd, wait_time=self.timeouts['initial_wait'] + 2.0)
+                        
+                        if output_retry:
+                            interfaces_retry = parse_mikrotik_interfaces(output_retry)
+                            if len(interfaces_retry) > len(interfaces):
+                                logger.info(f"MikroTik: Retry improved! Got {len(interfaces_retry)} interfaces")
+                                interfaces = interfaces_retry
+                            elif len(interfaces_retry) == len(interfaces):
+                                logger.info(f"MikroTik: Retry same count ({len(interfaces_retry)})")
+                    else:
+                        logger.info(f"MikroTik: Count OK ({len(interfaces)}/{expected_count})")
                 
                 return interfaces
         
@@ -758,7 +774,7 @@ class BotLinkMaster:
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("BotLinkMaster v4.8.1 - Network Device Connection Module")
+    print("BotLinkMaster v4.8.2 - Network Device Connection Module")
     print("=" * 60)
     print("\nSupported Vendors:")
     from vendor_commands import get_supported_vendors
