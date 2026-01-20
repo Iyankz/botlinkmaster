@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster - Vendor Commands v4.8.5
+BotLinkMaster - Vendor Commands v4.8.6
 Multi-vendor support for routers and switches
 
-CHANGELOG v4.8.5:
-- FIX: MikroTik paging issue - sfp-sfpplus16 tidak muncul karena paging aktif
-- FIX: Tambahkan "without-paging" ke semua MikroTik commands
-- FIX: Handle paging prompt "-- [Q quit|D dump|down]"
+CHANGELOG v4.8.6:
+- FIX: MikroTik menggunakan "/interface ethernet print without-paging"
+       (hanya ethernet & SFP, tanpa bridge/vlan/loopback)
+- FIX: Support interface lebih dari 16 port
+- ADD: Huawei "display interface {interface} transceiver brief" untuk optical
+- IMPROVED: Timeout handling untuk device dengan banyak interface
 
-CHANGELOG v4.8.4:
-- FIX: Comment dengan karakter khusus {}, []
+CHANGELOG v4.8.5:
+- FIX: MikroTik paging issue dengan without-paging
 
 Note: OLT support will be available in v5.0.0
 
 Author: BotLinkMaster
-Version: 4.8.5
+Version: 4.8.6
 """
 
 import re
@@ -74,7 +76,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         name="Cisco IOS/IOS-XE",
         disable_paging="terminal length 0",
         show_interface="show interface {interface}",
-        show_interface_brief="show ip interface brief",
+        show_interface_brief="show interface brief",
         show_interface_status="show interface status",
         show_interface_description="show interface description",
         show_optical_all="show interface transceiver",
@@ -142,7 +144,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
     ),
     
     # ==========================================================================
-    # HUAWEI VRP
+    # HUAWEI VRP - Updated v4.8.6
     # ==========================================================================
     Vendor.HUAWEI.value: VendorConfig(
         name="Huawei VRP",
@@ -154,7 +156,9 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         show_optical_all="display transceiver",
         show_optical_interface="display transceiver interface {interface}",
         show_optical_detail="display interface {interface} transceiver verbose",
+        # v4.8.6: Added transceiver brief for some Huawei switches
         alt_optical_commands=[
+            "display interface {interface} transceiver brief",  # v4.8.6: New command
             "display interface {interface} transceiver verbose",
             "display transceiver interface {interface} verbose",
             "display transceiver diagnosis interface {interface}",
@@ -168,6 +172,9 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
             r"RX\s+Power[:\s]+(-?\d+\.?\d*)",
             r"Rx\s+optical\s+power[:\s]+(-?\d+\.?\d*)",
             r"RX[:\s]+(-?\d+\.?\d*)\s*dBm",
+            # v4.8.6: Additional patterns for transceiver brief
+            r"Rx\s+Power\s*:\s*(-?\d+\.?\d*)",
+            r"RxPower[:\s]+(-?\d+\.?\d*)",
         ],
         tx_power_patterns=[
             r"TX\s*power\s*\(dBm\)[:\s\|]+(-?\d+\.?\d*)",
@@ -177,11 +184,14 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
             r"TX\s+Power[:\s]+(-?\d+\.?\d*)",
             r"Tx\s+optical\s+power[:\s]+(-?\d+\.?\d*)",
             r"TX[:\s]+(-?\d+\.?\d*)\s*dBm",
+            # v4.8.6: Additional patterns for transceiver brief
+            r"Tx\s+Power\s*:\s*(-?\d+\.?\d*)",
+            r"TxPower[:\s]+(-?\d+\.?\d*)",
         ],
         status_up_patterns=[r"current state[:\s]*UP", r"Physical[:\s]+UP", r"is\s+UP"],
         status_down_patterns=[r"current state[:\s]*DOWN", r"Physical[:\s]+DOWN", r"is\s+DOWN"],
         description_pattern=r"Description[:\s]+(.+?)(?:\n|$)",
-        notes="Huawei routers and switches",
+        notes="Huawei routers and switches - v4.8.6: Added transceiver brief support",
     ),
     
     # ==========================================================================
@@ -232,25 +242,27 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
     ),
     
     # ==========================================================================
-    # MIKROTIK RouterOS - FIXED v4.8.5
+    # MIKROTIK RouterOS - FIXED v4.8.6
     # ==========================================================================
     Vendor.MIKROTIK.value: VendorConfig(
         name="MikroTik RouterOS",
-        disable_paging="",  # MikroTik uses "without-paging" in commands instead
-        # v4.8.5: Added "without-paging" to all commands to prevent paging
-        show_interface="/interface print detail without-paging where name={interface}",
-        show_interface_brief="/interface print brief without-paging",
-        show_interface_status="/interface print brief without-paging",
-        show_interface_description="/interface print brief without-paging",
-        show_optical_all="/interface ethernet monitor [find] once without-paging",
+        disable_paging="",  # MikroTik uses "without-paging" in commands
+        show_interface="/interface ethernet print detail without-paging where name={interface}",
+        # v4.8.6: Gunakan "ethernet print" bukan "print brief"
+        # Ini hanya menampilkan ethernet & SFP tanpa bridge/vlan/loopback
+        show_interface_brief="/interface ethernet print without-paging",
+        show_interface_status="/interface ethernet print without-paging",
+        show_interface_description="/interface ethernet print without-paging",
+        show_optical_all="/interface ethernet monitor [find] once",
         show_optical_interface="/interface ethernet monitor {interface} once",
         show_optical_detail="/interface ethernet monitor {interface} once",
         alt_optical_commands=[
             "/interface ethernet monitor {interface} once",
         ],
+        # v4.8.6: Updated commands
         alt_interface_commands=[
+            "/interface ethernet print without-paging",
             "/interface print brief without-paging",
-            "/interface print without-paging",
         ],
         interface_parser="mikrotik",
         rx_power_patterns=[
@@ -271,7 +283,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
             r"disabled=yes",
         ],
         description_pattern=r"comment[:\s]+(.+?)(?:\n|$)",
-        notes="MikroTik RouterOS - Flags: R=RUNNING, S=SLAVE, X=DISABLED",
+        notes="MikroTik RouterOS v4.8.6 - ethernet print for ether/SFP only",
     ),
     
     # ==========================================================================
@@ -689,14 +701,12 @@ class OpticalParser:
 
 
 # =============================================================================
-# MIKROTIK OUTPUT CLEANER - v4.8.5
+# MIKROTIK OUTPUT CLEANER - v4.8.6
 # =============================================================================
 
 def clean_mikrotik_output(output: str) -> str:
     """
     Clean MikroTik output - remove prompts, paging, and command echoes
-    
-    v4.8.5: Also remove paging prompts like "-- [Q quit|D dump|down]"
     """
     if not output:
         return output
@@ -712,12 +722,11 @@ def clean_mikrotik_output(output: str) -> str:
     cleaned_lines = []
     
     for line in lines:
-        # v4.8.5: Skip paging prompt lines
-        # Pattern: "-- [Q quit|D dump|down]" or "-- more --" etc
+        # Skip paging prompt lines
         if line.strip().startswith('-- [') or line.strip() == '-- more --':
             continue
         
-        # Skip pure prompt lines: [user@hostname] > or [user@hostname] /path>
+        # Skip pure prompt lines
         if re.match(r'^\s*\[[\w\-@]+\]\s*[/\w]*[>#]\s*$', line):
             continue
         
@@ -730,14 +739,15 @@ def clean_mikrotik_output(output: str) -> str:
 
 
 # =============================================================================
-# MIKROTIK INTERFACE PARSER - v4.8.5
+# MIKROTIK INTERFACE PARSER - v4.8.6
 # =============================================================================
 
 def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
     """
-    Parse MikroTik /interface print brief output - v4.8.5
+    Parse MikroTik /interface ethernet print without-paging output - v4.8.6
     
-    v4.8.5: Handle paging and ensure all interfaces are captured
+    v4.8.6: Support for unlimited interfaces (not just 16)
+    Output format: NUM FLAGS NAME TYPE MTU MAC-ADDRESS
     """
     interfaces = []
     
@@ -759,10 +769,12 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
         # Skip headers
         if line_stripped.startswith('Flags:') or line_stripped.startswith('Columns:'):
             continue
-        if 'NAME' in line_stripped and 'TYPE' in line_stripped and 'MTU' in line_stripped:
+        if 'NAME' in line_stripped and 'TYPE' in line_stripped:
+            continue
+        if 'NAME' in line_stripped and 'MTU' in line_stripped:
             continue
         
-        # v4.8.5: Skip paging prompts
+        # Skip paging prompts
         if line_stripped.startswith('-- [') or line_stripped.startswith('-- more'):
             continue
         
@@ -779,7 +791,11 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
             else:
                 continue
         
-        # Interface line pattern
+        # Interface line pattern: NUM FLAGS NAME TYPE ...
+        # Examples:
+        #  0    ether1         ether  1500  48:8F:5A:05:51:79
+        #  1 RS sfp-sfpplus1   ether  1500  48:8F:5A:05:51:69
+        # 15  S sfp-sfpplus16  ether  1500  48:8F:5A:05:51:78
         match = re.match(r'^(\d+)\s+(.+)$', line_stripped)
         
         if not match:
@@ -802,6 +818,7 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
         
         first = parts[0]
         
+        # Flags: R=running, S=slave, X=disabled, D=dynamic
         if len(first) <= 4 and first.isalpha() and all(c in 'RSDXrsdx' for c in first):
             flags = first.upper()
             name_idx = 1
@@ -819,13 +836,14 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
         if '@' in name and name.startswith('['):
             continue
         
-        # Determine status
+        # Determine status from flags
+        # R = running = link up
         if 'R' in flags:
             status = 'up'
         else:
             status = 'down'
         
-        # Get type
+        # Get type (next field after name)
         iface_type = ''
         if len(parts) > name_idx + 1:
             potential_type = parts[name_idx + 1]
