@@ -447,10 +447,7 @@ Pull request dan issue welcome di GitHub repository.
 
 **Catatan:** Untuk bantuan lebih lanjut, gunakan `/help` dan `/help2` di bot.
 
-## Dibuat dengan ❤️ oleh [Iyankz](https://github.com/Iyankz) & [Claude](https://claude.ai)
-
-- **Iyankz** (Inisiator , Developer & Tester)
-- **Claude** (AI Partner & Technical Assistant)
+## Dibuat dengan ❤️ oleh [Iyankz](https://github.com/Iyankz)
 
 ## Lisensi
 
