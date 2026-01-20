@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.8.5 - Telegram Bot
+BotLinkMaster v4.8.6 - Telegram Bot
 Network device monitoring with multi-vendor optical power support
 
-CHANGELOG v4.8.5:
-- FIX: MikroTik paging issue - interface terakhir tidak muncul
-- FIX: Tambahkan "without-paging" ke semua MikroTik commands
+CHANGELOG v4.8.6:
+- FIX: MikroTik menggunakan "/interface ethernet print without-paging"
+- FIX: Timeout MikroTik & Huawei ditingkatkan
+- ADD: Huawei transceiver brief command
+- IMPROVED: Support unlimited interface count
 
 Author: BotLinkMaster
-Version: 4.8.5
+Version: 4.8.6
 """
 
 import os
@@ -75,7 +77,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await update.message.reply_text(
-        f"🤖 BotLinkMaster v4.8.5\n"
+        f"🤖 BotLinkMaster v4.8.6\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"Bot monitoring perangkat jaringan.\n"
         f"Support 18 vendor router & switch.\n\n"
@@ -94,7 +96,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await update.message.reply_text(
-        "🔧 BANTUAN BOTLINKMASTER v4.8.5\n"
+        "🔧 BANTUAN BOTLINKMASTER v4.8.6\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "📋 INFO:\n"
         "/start - Info bot\n"
@@ -362,7 +364,7 @@ async def delete_device(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def list_interfaces(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     List all interfaces with pagination
-    v4.8.5: Fixed comments with special characters
+    v4.8.6: Support unlimited interfaces
     """
     if not await check_auth(update):
         return
@@ -424,7 +426,7 @@ async def list_interfaces(update: Update, context: ContextTypes.DEFAULT_TYPE):
             per_page = 20
             total = len(interfaces)
             
-            # If total <= 25, show all in one page (no pagination needed)
+            # If total <= 25, show all in one page
             if total <= 25:
                 per_page = total
                 page = 1
@@ -442,7 +444,6 @@ async def list_interfaces(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             text += f"📊 Total: {total} | 🟢 Up: {up_count} | 🔴 Down: {down_count}\n"
             
-            # Show pagination info only if needed
             if total > 25:
                 text += f"📄 Halaman {page}/{total_pages}\n"
             
@@ -462,7 +463,6 @@ async def list_interfaces(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     desc = iface['description'][:30]
                     text += f"   {desc}\n"
             
-            # Show navigation only if needed
             if total > 25 and total_pages > 1:
                 text += f"\n📄 /interfaces {device_name} [1-{total_pages}]"
             
@@ -645,7 +645,7 @@ def main():
         print("ERROR: TELEGRAM_BOT_TOKEN tidak ditemukan di .env")
         return
     
-    logger.info("Starting BotLinkMaster v4.8.5...")
+    logger.info("Starting BotLinkMaster v4.8.6...")
     
     app = Application.builder().token(token).build()
     
@@ -669,14 +669,15 @@ def main():
     app.add_error_handler(error_handler)
     
     print("\n" + "=" * 50)
-    print("BotLinkMaster v4.8.5 Started!")
+    print("BotLinkMaster v4.8.6 Started!")
     print("=" * 50)
     print(f"\nTimezone: {tz_manager.get_timezone()}")
     print(f"Time: {tz_manager.get_current_time()}")
-    print("\nv4.8.5 Fixes:")
-    print("  - Wait for prompt before sending commands")
-    print("  - Fixed comments with special chars {}, []")
-    print("  - sfp-sfpplus16 now detected correctly")
+    print("\nv4.8.6 Improvements:")
+    print("  - MikroTik: ethernet print without-paging")
+    print("  - MikroTik: 30s timeout for many interfaces")
+    print("  - Huawei: transceiver brief command")
+    print("  - Support unlimited interface count")
     print("\nNote: OLT support will be available in v5.0.0")
     print("\n[Press Ctrl+C to stop]\n")
     
