@@ -1,24 +1,20 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster - Vendor Commands v4.8.4
+BotLinkMaster - Vendor Commands v4.8.5
 Multi-vendor support for routers and switches
 
+CHANGELOG v4.8.5:
+- FIX: MikroTik paging issue - sfp-sfpplus16 tidak muncul karena paging aktif
+- FIX: Tambahkan "without-paging" ke semua MikroTik commands
+- FIX: Handle paging prompt "-- [Q quit|D dump|down]"
+
 CHANGELOG v4.8.4:
-- FIX: Comment dengan karakter khusus {}, [] menyebabkan interface hilang
-- FIX: sfp-sfpplus16 tidak terbaca karena comment "Cust:xxxx{cvlan}[speed]"
-- IMPROVED: Better comment/description handling
-- IMPROVED: More robust interface line detection
-
-CHANGELOG v4.8.3:
-- FIX: Wait for prompt before sending commands
-
-CHANGELOG v4.8.2:
-- FIX: MikroTik last interface not parsed (sfp-sfpplus16 missing)
+- FIX: Comment dengan karakter khusus {}, []
 
 Note: OLT support will be available in v5.0.0
 
 Author: BotLinkMaster
-Version: 4.8.4
+Version: 4.8.5
 """
 
 import re
@@ -236,26 +232,25 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
     ),
     
     # ==========================================================================
-    # MIKROTIK RouterOS - FIXED
+    # MIKROTIK RouterOS - FIXED v4.8.5
     # ==========================================================================
     Vendor.MIKROTIK.value: VendorConfig(
         name="MikroTik RouterOS",
-        disable_paging="",
-        show_interface="/interface print detail where name={interface}",
-        show_interface_brief="/interface print brief",
-        show_interface_status="/interface print brief",
-        show_interface_description="/interface print brief",
-        show_optical_all="/interface ethernet monitor [find] once",
-        show_optical_interface="interface/ethernet/monitor {interface} once",
-        show_optical_detail="interface/ethernet/monitor {interface} once",
+        disable_paging="",  # MikroTik uses "without-paging" in commands instead
+        # v4.8.5: Added "without-paging" to all commands to prevent paging
+        show_interface="/interface print detail without-paging where name={interface}",
+        show_interface_brief="/interface print brief without-paging",
+        show_interface_status="/interface print brief without-paging",
+        show_interface_description="/interface print brief without-paging",
+        show_optical_all="/interface ethernet monitor [find] once without-paging",
+        show_optical_interface="/interface ethernet monitor {interface} once",
+        show_optical_detail="/interface ethernet monitor {interface} once",
         alt_optical_commands=[
-            "/interface ethernet monitor {interface}",
-            "interface/ethernet/monitor {interface} once",
             "/interface ethernet monitor {interface} once",
         ],
         alt_interface_commands=[
-            "/interface print brief",
-            "/interface print",
+            "/interface print brief without-paging",
+            "/interface print without-paging",
         ],
         interface_parser="mikrotik",
         rx_power_patterns=[
@@ -694,14 +689,14 @@ class OpticalParser:
 
 
 # =============================================================================
-# MIKROTIK OUTPUT CLEANER - v4.8.4
+# MIKROTIK OUTPUT CLEANER - v4.8.5
 # =============================================================================
 
 def clean_mikrotik_output(output: str) -> str:
     """
-    Clean MikroTik output - remove prompts and command echoes
+    Clean MikroTik output - remove prompts, paging, and command echoes
     
-    v4.8.4: More careful cleaning to preserve data
+    v4.8.5: Also remove paging prompts like "-- [Q quit|D dump|down]"
     """
     if not output:
         return output
@@ -717,13 +712,16 @@ def clean_mikrotik_output(output: str) -> str:
     cleaned_lines = []
     
     for line in lines:
+        # v4.8.5: Skip paging prompt lines
+        # Pattern: "-- [Q quit|D dump|down]" or "-- more --" etc
+        if line.strip().startswith('-- [') or line.strip() == '-- more --':
+            continue
+        
         # Skip pure prompt lines: [user@hostname] > or [user@hostname] /path>
-        # BUT be careful not to remove lines that just contain [ from comments
         if re.match(r'^\s*\[[\w\-@]+\]\s*[/\w]*[>#]\s*$', line):
             continue
         
         # Remove prompt from END of line only
-        # Pattern: [user@host] > at the very end
         line = re.sub(r'\s*\[[\w\-@]+\]\s*[/\w]*[>#]\s*$', '', line)
         
         cleaned_lines.append(line)
@@ -732,39 +730,21 @@ def clean_mikrotik_output(output: str) -> str:
 
 
 # =============================================================================
-# MIKROTIK INTERFACE PARSER - FIXED v4.8.4
+# MIKROTIK INTERFACE PARSER - v4.8.5
 # =============================================================================
 
 def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
     """
-    Parse MikroTik /interface print brief output - FIXED v4.8.4
+    Parse MikroTik /interface print brief output - v4.8.5
     
-    Format:
-    Flags: R - RUNNING; S - SLAVE
-    Columns: NAME, TYPE, ACTUAL-MTU, L2MTU, MAX-L2MTU, MAC-ADDRESS
-    #   NAME           TYPE      ACTUAL-MTU  L2MTU  MAX-L2MTU  MAC-ADDRESS
-    0   ether1         ether           1500   1584      10218  48:8F:5A:05:51:79
-    ;;; Cust:SECAPA{cvlan 400}[2Gbps]
-    15 RS sfp-sfpplus16   ether           1500   1584      10218  48:8F:5A:05:51:69
-    
-    v4.8.4 FIX:
-    - Handle comments with special characters: {}, [], :, etc.
-    - Comment line (;;;) should NOT affect next interface line parsing
-    - Don't strip [ from interface names - only remove MikroTik prompts
-    
-    Flag meanings:
-    - R = RUNNING = UP
-    - RS = RUNNING + SLAVE = UP  
-    - S = SLAVE only = DOWN
-    - X = DISABLED = DOWN
-    - (empty) = DOWN
+    v4.8.5: Handle paging and ensure all interfaces are captured
     """
     interfaces = []
     
     if not output:
         return interfaces
     
-    # v4.8.4: Clean output but preserve data
+    # Clean output
     output = clean_mikrotik_output(output)
     
     lines = output.split('\n')
@@ -782,31 +762,24 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
         if 'NAME' in line_stripped and 'TYPE' in line_stripped and 'MTU' in line_stripped:
             continue
         
-        # v4.8.4: Capture comments - can contain ANY characters including {}, []
-        # Example: ;;; Cust:SECAPA{cvlan 400}[2Gbps]
+        # v4.8.5: Skip paging prompts
+        if line_stripped.startswith('-- [') or line_stripped.startswith('-- more'):
+            continue
+        
+        # Capture comments
         if line_stripped.startswith(';;;'):
             current_comment = line_stripped[3:].strip()
             continue
         
-        # v4.8.4: Skip lines that are ONLY a MikroTik prompt
-        # Must have @ and end with > or #
+        # Skip prompt lines
         if re.match(r'^\[[\w\-]+@[\w\-]+\].*[>#]\s*$', line_stripped):
-            # Check if there's actual data after the prompt
-            # Example: [admin@MT] > 15 RS sfp-sfpplus16 ether
             match = re.search(r'[>#]\s*(\d+.*)$', line_stripped)
             if match:
-                # There's data after prompt, extract it
                 line_stripped = match.group(1).strip()
             else:
                 continue
         
-        # v4.8.4: Interface line pattern - starts with number
-        # Pattern: NUM [FLAGS] NAME TYPE ...
-        # Examples:
-        #   0   ether1         ether           1500
-        #   1 RS sfp-sfpplus1   ether           1500
-        #  15   sfp-sfpplus16  ether           1500
-        
+        # Interface line pattern
         match = re.match(r'^(\d+)\s+(.+)$', line_stripped)
         
         if not match:
@@ -815,11 +788,7 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
         idx = match.group(1)
         rest = match.group(2).strip()
         
-        # v4.8.4: DON'T aggressively remove [ from the line
-        # Only remove if it's clearly a MikroTik prompt pattern [user@host]
-        # NOT if it's part of data like [2Gbps]
-        
-        # Remove trailing prompt ONLY if it matches MikroTik prompt pattern
+        # Remove trailing prompt if attached
         rest = re.sub(r'\s*\[[\w\-]+@[\w\-]+\].*$', '', rest).strip()
         
         parts = rest.split()
@@ -833,8 +802,6 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
         
         first = parts[0]
         
-        # Check if first part is flags (R, RS, S, X, D, etc.)
-        # v4.8.4: Flags are 1-4 uppercase letters from set {R,S,D,X}
         if len(first) <= 4 and first.isalpha() and all(c in 'RSDXrsdx' for c in first):
             flags = first.upper()
             name_idx = 1
@@ -844,30 +811,24 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
         
         name = parts[name_idx]
         
-        # v4.8.4: DON'T strip [ from name - interface names don't contain [
-        # But DO remove if there's a MikroTik prompt attached
-        # Only clean if it looks like [user@host] pattern
-        if '@' in name and name.startswith('['):
-            # This is a prompt, not a valid name
-            continue
-        
         # Skip invalid names
         if not name:
             continue
         if name in ['ether', 'bond', 'bridge', 'vlan', 'loopback', 'Flags:', 'Columns:', 'NAME']:
             continue
+        if '@' in name and name.startswith('['):
+            continue
         
-        # Determine status from flags
+        # Determine status
         if 'R' in flags:
             status = 'up'
         else:
             status = 'down'
         
-        # Get type (next field after name)
+        # Get type
         iface_type = ''
         if len(parts) > name_idx + 1:
             potential_type = parts[name_idx + 1]
-            # Type should be simple: ether, bridge, vlan, etc.
             if potential_type in ['ether', 'bridge', 'vlan', 'bond', 'loopback', 'pppoe-out', 'l2tp-out', 'ovpn-out']:
                 iface_type = potential_type
         
@@ -879,7 +840,7 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
             'type': iface_type,
         })
         
-        # Reset comment for next interface
+        # Reset comment
         current_comment = ''
     
     return interfaces
@@ -890,16 +851,7 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
 # =============================================================================
 
 def parse_cisco_nxos_interfaces(output: str) -> List[Dict[str, Any]]:
-    """
-    Parse Cisco NX-OS show interface status output
-    
-    Format:
-    --------------------------------------------------------------------------------
-    Port          Name               Status    Vlan      Duplex  Speed   Type
-    --------------------------------------------------------------------------------
-    Eth1/1        Uplink-Router      connected 1         full    10G     10Gbase-SR
-    Eth1/2        --                 notconnect 1        auto    auto    --
-    """
+    """Parse Cisco NX-OS show interface status output"""
     interfaces = []
     
     if not output:
