@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.8.4 - Telegram Bot
+BotLinkMaster v4.8.5 - Telegram Bot
 Network device monitoring with multi-vendor optical power support
 
-CHANGELOG v4.8.4:
-- FIX: Comments dengan karakter khusus {}, [] menyebabkan interface hilang
-- FIX: sfp-sfpplus16 tidak terbaca karena comment "Cust:xxxx{cvlan}[speed]"
-- IMPROVED: Better MikroTik comment/description handling
+CHANGELOG v4.8.5:
+- FIX: MikroTik paging issue - interface terakhir tidak muncul
+- FIX: Tambahkan "without-paging" ke semua MikroTik commands
 
 Author: BotLinkMaster
-Version: 4.8.4
+Version: 4.8.5
 """
 
 import os
@@ -76,7 +75,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await update.message.reply_text(
-        f"🤖 BotLinkMaster v4.8.4\n"
+        f"🤖 BotLinkMaster v4.8.5\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"Bot monitoring perangkat jaringan.\n"
         f"Support 18 vendor router & switch.\n\n"
@@ -95,7 +94,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await update.message.reply_text(
-        "🔧 BANTUAN BOTLINKMASTER v4.8.4\n"
+        "🔧 BANTUAN BOTLINKMASTER v4.8.5\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "📋 INFO:\n"
         "/start - Info bot\n"
@@ -363,7 +362,7 @@ async def delete_device(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def list_interfaces(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     List all interfaces with pagination
-    v4.8.4: Fixed comments with special characters
+    v4.8.5: Fixed comments with special characters
     """
     if not await check_auth(update):
         return
@@ -646,7 +645,7 @@ def main():
         print("ERROR: TELEGRAM_BOT_TOKEN tidak ditemukan di .env")
         return
     
-    logger.info("Starting BotLinkMaster v4.8.4...")
+    logger.info("Starting BotLinkMaster v4.8.5...")
     
     app = Application.builder().token(token).build()
     
@@ -670,11 +669,11 @@ def main():
     app.add_error_handler(error_handler)
     
     print("\n" + "=" * 50)
-    print("BotLinkMaster v4.8.4 Started!")
+    print("BotLinkMaster v4.8.5 Started!")
     print("=" * 50)
     print(f"\nTimezone: {tz_manager.get_timezone()}")
     print(f"Time: {tz_manager.get_current_time()}")
-    print("\nv4.8.4 Fixes:")
+    print("\nv4.8.5 Fixes:")
     print("  - Wait for prompt before sending commands")
     print("  - Fixed comments with special chars {}, []")
     print("  - sfp-sfpplus16 now detected correctly")
