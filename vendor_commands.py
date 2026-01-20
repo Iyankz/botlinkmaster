@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster - Vendor Commands v4.6.0
+BotLinkMaster - Vendor Commands v4.8.2
 Multi-vendor support for routers and switches
+
+CHANGELOG v4.8.2:
+- FIX: MikroTik last interface not parsed (sfp-sfpplus16 missing)
+- Added prompt cleaning before parsing
+- Better handling of last line with prompt attached
 
 Note: OLT support will be available in v5.0.0
 
 Author: BotLinkMaster
-Version: 4.6.0
+Version: 4.8.2
 """
 
 import re
@@ -682,12 +687,63 @@ class OpticalParser:
 
 
 # =============================================================================
-# MIKROTIK INTERFACE PARSER
+# MIKROTIK OUTPUT CLEANER - NEW v4.8.2
+# =============================================================================
+
+def clean_mikrotik_output(output: str) -> str:
+    """
+    Clean MikroTik output - remove prompts and command echoes
+    
+    MikroTik prompt patterns:
+    - [admin@MikroTik] > 
+    - [admin@hostname] /interface> 
+    - [admin@SW-SECAPA] > 
+    """
+    if not output:
+        return output
+    
+    # Remove ANSI escape codes
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    output = ansi_escape.sub('', output)
+    
+    # Remove MikroTik prompts that might be attached to data
+    # Pattern: [user@hostname] optional_path>
+    prompt_pattern = r'\[[\w\-]+@[\w\-]+\][\s\w/]*[>#]\s*$'
+    
+    lines = output.split('\n')
+    cleaned_lines = []
+    
+    for line in lines:
+        # Remove prompt from end of line
+        line = re.sub(prompt_pattern, '', line)
+        
+        # Also handle prompt at start of line (command echo)
+        if re.match(r'^\[[\w\-]+@[\w\-]+\]', line):
+            # This is a prompt line, might have command after it
+            # Extract any data after the prompt
+            match = re.search(r'[>#]\s*(.+)$', line)
+            if match:
+                # There's data after the prompt
+                remaining = match.group(1).strip()
+                # Check if this is just another command
+                if remaining.startswith('/') or remaining.startswith('interface'):
+                    continue  # Skip command lines
+                line = remaining
+            else:
+                continue  # Skip pure prompt lines
+        
+        cleaned_lines.append(line)
+    
+    return '\n'.join(cleaned_lines)
+
+
+# =============================================================================
+# MIKROTIK INTERFACE PARSER - FIXED v4.8.2
 # =============================================================================
 
 def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
     """
-    Parse MikroTik /interface print brief output
+    Parse MikroTik /interface print brief output - FIXED v4.8.2
     
     Format:
     Flags: R - RUNNING; S - SLAVE
@@ -696,6 +752,11 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
     0   ether1         ether           1500   1584      10218  48:8F:5A:05:51:79
     ;;; link Utara 96
     1 RS sfp-sfpplus1   ether           1500   1584      10218  48:8F:5A:05:51:69
+    
+    v4.8.2 FIX:
+    - Clean MikroTik prompts from output before parsing
+    - Handle last line that might have prompt attached
+    - Better regex to capture interface even with trailing prompt
     
     Flag meanings:
     - R = RUNNING = UP (interface is active and running)
@@ -709,14 +770,14 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
     if not output:
         return interfaces
     
-    # Clean ANSI codes
-    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-    output = ansi_escape.sub('', output)
+    # v4.8.2: Clean output first
+    output = clean_mikrotik_output(output)
     
     lines = output.split('\n')
     current_comment = ''
     
     for line in lines:
+        # Don't strip completely - preserve leading spaces for parsing
         line_stripped = line.strip()
         
         if not line_stripped:
@@ -728,17 +789,41 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
         if 'NAME' in line_stripped and 'TYPE' in line_stripped:
             continue
         
+        # Skip prompt lines
+        if line_stripped.startswith('[') and '@' in line_stripped:
+            continue
+        
         # Capture comments (description)
         if line_stripped.startswith(';;;'):
             current_comment = line_stripped[3:].strip()
             continue
         
-        # Parse interface line: "NUM [FLAGS] NAME TYPE ..."
+        # v4.8.2: More robust interface line parsing
+        # Pattern: NUM [FLAGS] NAME TYPE ...
+        # Examples:
+        #   0   ether1         ether           1500
+        #   1 RS sfp-sfpplus1   ether           1500
+        #  15   sfp-sfpplus16  ether           1500
+        
+        # Try multiple patterns
+        match = None
+        
+        # Pattern 1: Standard format "NUM [FLAGS] NAME TYPE ..."
         match = re.match(r'^(\d+)\s+(.+)$', line_stripped)
+        
+        if not match:
+            # Pattern 2: Try to find interface name directly
+            # Sometimes the number might be at weird position
+            match = re.match(r'^\s*(\d+)\s+(.+)$', line)
+        
         if not match:
             continue
         
         rest = match.group(2).strip()
+        
+        # v4.8.2: Remove any trailing prompt that might be attached
+        rest = re.sub(r'\[[\w\-]+@[\w\-]+\].*$', '', rest).strip()
+        
         parts = rest.split()
         
         if not parts:
@@ -750,7 +835,8 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
         
         first = parts[0]
         # Check if first part is flags (R, RS, S, X, etc.)
-        if len(first) <= 4 and all(c in 'RSDXrsdx' for c in first):
+        # Flags are typically 1-3 characters, all uppercase letters from set {R,S,D,X}
+        if len(first) <= 4 and first.isalpha() and all(c in 'RSDXrsdx' for c in first):
             flags = first.upper()
             name_idx = 1
         
@@ -759,8 +845,16 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
         
         name = parts[name_idx]
         
+        # v4.8.2: Clean name - remove any trailing prompt or garbage
+        name = re.sub(r'\[.*$', '', name).strip()
+        
         # Skip if not valid interface name
-        if not name or name in ['ether', 'bond', 'bridge', 'vlan', 'loopback']:
+        if not name:
+            continue
+        if name in ['ether', 'bond', 'bridge', 'vlan', 'loopback', 'Flags:', 'Columns:', 'NAME']:
+            continue
+        # Skip if name looks like a prompt
+        if name.startswith('[') or '@' in name:
             continue
         
         # Determine status from flags
@@ -776,6 +870,10 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
             status = 'down'  # No R flag = Not running (including S alone, X, or empty)
         
         iface_type = parts[name_idx + 1] if len(parts) > name_idx + 1 else ''
+        
+        # v4.8.2: Validate iface_type - should be 'ether', 'bridge', etc.
+        if iface_type and (iface_type.startswith('[') or '@' in iface_type):
+            iface_type = ''
         
         interfaces.append({
             'name': name,
