@@ -1,17 +1,24 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster - Vendor Commands v4.8.2
+BotLinkMaster - Vendor Commands v4.8.4
 Multi-vendor support for routers and switches
+
+CHANGELOG v4.8.4:
+- FIX: Comment dengan karakter khusus {}, [] menyebabkan interface hilang
+- FIX: sfp-sfpplus16 tidak terbaca karena comment "Cust:xxxx{cvlan}[speed]"
+- IMPROVED: Better comment/description handling
+- IMPROVED: More robust interface line detection
+
+CHANGELOG v4.8.3:
+- FIX: Wait for prompt before sending commands
 
 CHANGELOG v4.8.2:
 - FIX: MikroTik last interface not parsed (sfp-sfpplus16 missing)
-- Added prompt cleaning before parsing
-- Better handling of last line with prompt attached
 
 Note: OLT support will be available in v5.0.0
 
 Author: BotLinkMaster
-Version: 4.8.2
+Version: 4.8.4
 """
 
 import re
@@ -687,17 +694,14 @@ class OpticalParser:
 
 
 # =============================================================================
-# MIKROTIK OUTPUT CLEANER - NEW v4.8.2
+# MIKROTIK OUTPUT CLEANER - v4.8.4
 # =============================================================================
 
 def clean_mikrotik_output(output: str) -> str:
     """
     Clean MikroTik output - remove prompts and command echoes
     
-    MikroTik prompt patterns:
-    - [admin@MikroTik] > 
-    - [admin@hostname] /interface> 
-    - [admin@SW-SECAPA] > 
+    v4.8.4: More careful cleaning to preserve data
     """
     if not output:
         return output
@@ -706,31 +710,21 @@ def clean_mikrotik_output(output: str) -> str:
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
     output = ansi_escape.sub('', output)
     
-    # Remove MikroTik prompts that might be attached to data
-    # Pattern: [user@hostname] optional_path>
-    prompt_pattern = r'\[[\w\-]+@[\w\-]+\][\s\w/]*[>#]\s*$'
+    # Remove carriage returns
+    output = output.replace('\r', '')
     
     lines = output.split('\n')
     cleaned_lines = []
     
     for line in lines:
-        # Remove prompt from end of line
-        line = re.sub(prompt_pattern, '', line)
+        # Skip pure prompt lines: [user@hostname] > or [user@hostname] /path>
+        # BUT be careful not to remove lines that just contain [ from comments
+        if re.match(r'^\s*\[[\w\-@]+\]\s*[/\w]*[>#]\s*$', line):
+            continue
         
-        # Also handle prompt at start of line (command echo)
-        if re.match(r'^\[[\w\-]+@[\w\-]+\]', line):
-            # This is a prompt line, might have command after it
-            # Extract any data after the prompt
-            match = re.search(r'[>#]\s*(.+)$', line)
-            if match:
-                # There's data after the prompt
-                remaining = match.group(1).strip()
-                # Check if this is just another command
-                if remaining.startswith('/') or remaining.startswith('interface'):
-                    continue  # Skip command lines
-                line = remaining
-            else:
-                continue  # Skip pure prompt lines
+        # Remove prompt from END of line only
+        # Pattern: [user@host] > at the very end
+        line = re.sub(r'\s*\[[\w\-@]+\]\s*[/\w]*[>#]\s*$', '', line)
         
         cleaned_lines.append(line)
     
@@ -738,46 +732,45 @@ def clean_mikrotik_output(output: str) -> str:
 
 
 # =============================================================================
-# MIKROTIK INTERFACE PARSER - FIXED v4.8.2
+# MIKROTIK INTERFACE PARSER - FIXED v4.8.4
 # =============================================================================
 
 def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
     """
-    Parse MikroTik /interface print brief output - FIXED v4.8.2
+    Parse MikroTik /interface print brief output - FIXED v4.8.4
     
     Format:
     Flags: R - RUNNING; S - SLAVE
     Columns: NAME, TYPE, ACTUAL-MTU, L2MTU, MAX-L2MTU, MAC-ADDRESS
     #   NAME           TYPE      ACTUAL-MTU  L2MTU  MAX-L2MTU  MAC-ADDRESS
     0   ether1         ether           1500   1584      10218  48:8F:5A:05:51:79
-    ;;; link Utara 96
-    1 RS sfp-sfpplus1   ether           1500   1584      10218  48:8F:5A:05:51:69
+    ;;; Cust:SECAPA{cvlan 400}[2Gbps]
+    15 RS sfp-sfpplus16   ether           1500   1584      10218  48:8F:5A:05:51:69
     
-    v4.8.2 FIX:
-    - Clean MikroTik prompts from output before parsing
-    - Handle last line that might have prompt attached
-    - Better regex to capture interface even with trailing prompt
+    v4.8.4 FIX:
+    - Handle comments with special characters: {}, [], :, etc.
+    - Comment line (;;;) should NOT affect next interface line parsing
+    - Don't strip [ from interface names - only remove MikroTik prompts
     
     Flag meanings:
-    - R = RUNNING = UP (interface is active and running)
-    - RS = RUNNING + SLAVE = UP (running and part of bonding/bridge)
-    - S = SLAVE only = DOWN (part of bonding but NOT running)
+    - R = RUNNING = UP
+    - RS = RUNNING + SLAVE = UP  
+    - S = SLAVE only = DOWN
     - X = DISABLED = DOWN
-    - (empty) = DOWN (not running)
+    - (empty) = DOWN
     """
     interfaces = []
     
     if not output:
         return interfaces
     
-    # v4.8.2: Clean output first
+    # v4.8.4: Clean output but preserve data
     output = clean_mikrotik_output(output)
     
     lines = output.split('\n')
     current_comment = ''
     
     for line in lines:
-        # Don't strip completely - preserve leading spaces for parsing
         line_stripped = line.strip()
         
         if not line_stripped:
@@ -786,43 +779,48 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
         # Skip headers
         if line_stripped.startswith('Flags:') or line_stripped.startswith('Columns:'):
             continue
-        if 'NAME' in line_stripped and 'TYPE' in line_stripped:
+        if 'NAME' in line_stripped and 'TYPE' in line_stripped and 'MTU' in line_stripped:
             continue
         
-        # Skip prompt lines
-        if line_stripped.startswith('[') and '@' in line_stripped:
-            continue
-        
-        # Capture comments (description)
+        # v4.8.4: Capture comments - can contain ANY characters including {}, []
+        # Example: ;;; Cust:SECAPA{cvlan 400}[2Gbps]
         if line_stripped.startswith(';;;'):
             current_comment = line_stripped[3:].strip()
             continue
         
-        # v4.8.2: More robust interface line parsing
+        # v4.8.4: Skip lines that are ONLY a MikroTik prompt
+        # Must have @ and end with > or #
+        if re.match(r'^\[[\w\-]+@[\w\-]+\].*[>#]\s*$', line_stripped):
+            # Check if there's actual data after the prompt
+            # Example: [admin@MT] > 15 RS sfp-sfpplus16 ether
+            match = re.search(r'[>#]\s*(\d+.*)$', line_stripped)
+            if match:
+                # There's data after prompt, extract it
+                line_stripped = match.group(1).strip()
+            else:
+                continue
+        
+        # v4.8.4: Interface line pattern - starts with number
         # Pattern: NUM [FLAGS] NAME TYPE ...
         # Examples:
         #   0   ether1         ether           1500
         #   1 RS sfp-sfpplus1   ether           1500
         #  15   sfp-sfpplus16  ether           1500
         
-        # Try multiple patterns
-        match = None
-        
-        # Pattern 1: Standard format "NUM [FLAGS] NAME TYPE ..."
         match = re.match(r'^(\d+)\s+(.+)$', line_stripped)
-        
-        if not match:
-            # Pattern 2: Try to find interface name directly
-            # Sometimes the number might be at weird position
-            match = re.match(r'^\s*(\d+)\s+(.+)$', line)
         
         if not match:
             continue
         
+        idx = match.group(1)
         rest = match.group(2).strip()
         
-        # v4.8.2: Remove any trailing prompt that might be attached
-        rest = re.sub(r'\[[\w\-]+@[\w\-]+\].*$', '', rest).strip()
+        # v4.8.4: DON'T aggressively remove [ from the line
+        # Only remove if it's clearly a MikroTik prompt pattern [user@host]
+        # NOT if it's part of data like [2Gbps]
+        
+        # Remove trailing prompt ONLY if it matches MikroTik prompt pattern
+        rest = re.sub(r'\s*\[[\w\-]+@[\w\-]+\].*$', '', rest).strip()
         
         parts = rest.split()
         
@@ -834,8 +832,9 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
         name_idx = 0
         
         first = parts[0]
-        # Check if first part is flags (R, RS, S, X, etc.)
-        # Flags are typically 1-3 characters, all uppercase letters from set {R,S,D,X}
+        
+        # Check if first part is flags (R, RS, S, X, D, etc.)
+        # v4.8.4: Flags are 1-4 uppercase letters from set {R,S,D,X}
         if len(first) <= 4 and first.isalpha() and all(c in 'RSDXrsdx' for c in first):
             flags = first.upper()
             name_idx = 1
@@ -845,35 +844,32 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
         
         name = parts[name_idx]
         
-        # v4.8.2: Clean name - remove any trailing prompt or garbage
-        name = re.sub(r'\[.*$', '', name).strip()
+        # v4.8.4: DON'T strip [ from name - interface names don't contain [
+        # But DO remove if there's a MikroTik prompt attached
+        # Only clean if it looks like [user@host] pattern
+        if '@' in name and name.startswith('['):
+            # This is a prompt, not a valid name
+            continue
         
-        # Skip if not valid interface name
+        # Skip invalid names
         if not name:
             continue
         if name in ['ether', 'bond', 'bridge', 'vlan', 'loopback', 'Flags:', 'Columns:', 'NAME']:
             continue
-        # Skip if name looks like a prompt
-        if name.startswith('[') or '@' in name:
-            continue
         
         # Determine status from flags
-        # CRITICAL: Only R (RUNNING) means UP
-        # - R or RS = UP (Running, or Running+Slave)
-        # - S alone = DOWN (Slave but NOT running)
-        # - X = DOWN (Disabled)
-        # - (empty) = DOWN (Not running)
-        
         if 'R' in flags:
-            status = 'up'  # Has R flag = Running
+            status = 'up'
         else:
-            status = 'down'  # No R flag = Not running (including S alone, X, or empty)
+            status = 'down'
         
-        iface_type = parts[name_idx + 1] if len(parts) > name_idx + 1 else ''
-        
-        # v4.8.2: Validate iface_type - should be 'ether', 'bridge', etc.
-        if iface_type and (iface_type.startswith('[') or '@' in iface_type):
-            iface_type = ''
+        # Get type (next field after name)
+        iface_type = ''
+        if len(parts) > name_idx + 1:
+            potential_type = parts[name_idx + 1]
+            # Type should be simple: ether, bridge, vlan, etc.
+            if potential_type in ['ether', 'bridge', 'vlan', 'bond', 'loopback', 'pppoe-out', 'l2tp-out', 'ovpn-out']:
+                iface_type = potential_type
         
         interfaces.append({
             'name': name,
@@ -883,6 +879,7 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
             'type': iface_type,
         })
         
+        # Reset comment for next interface
         current_comment = ''
     
     return interfaces
@@ -902,7 +899,6 @@ def parse_cisco_nxos_interfaces(output: str) -> List[Dict[str, Any]]:
     --------------------------------------------------------------------------------
     Eth1/1        Uplink-Router      connected 1         full    10G     10Gbase-SR
     Eth1/2        --                 notconnect 1        auto    auto    --
-    Eth1/24       Server-DB          connected trunk     full    10G     10Gbase-SR
     """
     interfaces = []
     
@@ -918,31 +914,25 @@ def parse_cisco_nxos_interfaces(output: str) -> List[Dict[str, Any]]:
         if not line:
             continue
         
-        # Skip header separator
         if '----' in line:
             in_data = True
             continue
         
-        # Skip header line
         if 'Port' in line and 'Status' in line:
             continue
         
         if not in_data:
             continue
         
-        # Parse interface line
         parts = line.split()
         if len(parts) < 3:
             continue
         
-        # First part is interface name
         iface_name = parts[0]
         
-        # Skip if not looks like interface
         if not any(c.isdigit() for c in iface_name):
             continue
         
-        # Find status - look for connected/notconnect/disabled/etc
         status = 'unknown'
         description = ''
         
@@ -959,7 +949,6 @@ def parse_cisco_nxos_interfaces(output: str) -> List[Dict[str, Any]]:
         elif 'xcvr not' in line_lower:
             status = 'down'
         
-        # Get description (second column, might be -- or actual name)
         if len(parts) >= 2:
             desc = parts[1]
             if desc != '--':
