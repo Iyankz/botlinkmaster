@@ -1,24 +1,23 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.8.0 - Network Device Connection Module
+BotLinkMaster v4.8.1 - Network Device Connection Module
 SSH/Telnet support for routers and switches
+
+CHANGELOG v4.8.1:
+- FIX: MikroTik interface count issue
+- Changed command order: /interface print brief FIRST (gets ALL interfaces)
+- /interface ethernet print only shows ethernet/SFP, missing ether, bridge, vlan
+- Now correctly detects all interface types
 
 CHANGELOG v4.8.0:
 - NEW: Improved MikroTik parser for 'detail' format
 - Support for MikroTik flags (R=Running, S=Slave, X=Disabled)
 - Better comment/description parsing with ;;; delimiter
-- Use '/interface ethernet print detail without-paging' for reliability
-- Accurate status detection from flags
-- Fixes interface count issues (now correctly detects all interfaces)
-
-CHANGELOG v4.7.0:
-- SFP Filter Feature: /interfaces [device] sfp
-- Support all MikroTik SFP types (1G, 10G, 25G, 100G)
 
 Note: OLT support will be available in v5.0.0
 
 Author: BotLinkMaster
-Version: 4.8.0
+Version: 4.8.1
 """
 
 import paramiko
@@ -88,9 +87,9 @@ class BotLinkMaster:
     # Vendor-specific timeouts
     VENDOR_TIMEOUTS = {
         'mikrotik': {
-            'idle_timeout': 5.5,      # Increased from 3.5s for slow devices
-            'initial_wait': 3.5,      # Increased from 2.5s
-            'hard_timeout': 30,       # Increased from 25s
+            'idle_timeout': 5.5,
+            'initial_wait': 3.5,
+            'hard_timeout': 30,
         },
         'cisco_nxos': {
             'idle_timeout': 2.0,
@@ -119,7 +118,6 @@ class BotLinkMaster:
         self.optical_parser = OpticalParser(config.vendor)
         self.connection_method = None
         
-        # Get vendor-specific timeouts
         vendor_key = config.vendor.lower()
         self.timeouts = self.VENDOR_TIMEOUTS.get(
             vendor_key, 
@@ -142,19 +140,16 @@ class BotLinkMaster:
         try:
             logger.info(f"Connecting to {self.config.host}:{self.config.port} via SSH...")
             
-            # Method 1: Transport with legacy algorithms
             try:
                 return self._connect_ssh_transport()
             except Exception as e:
                 logger.warning(f"Transport method failed: {e}")
             
-            # Method 2: Standard SSHClient
             try:
                 return self._connect_ssh_standard()
             except Exception as e:
                 logger.warning(f"Standard method failed: {e}")
             
-            # Method 3: Alternative
             return self._connect_ssh_alternative()
             
         except Exception as e:
@@ -260,7 +255,6 @@ class BotLinkMaster:
                 timeout=self.config.timeout
             )
             
-            # Login sequence
             output = self.client.read_until(b":", timeout=10).decode('utf-8', errors='ignore')
             if any(p in output.lower() for p in ['username', 'login', 'user']):
                 self.client.write(self.config.username.encode('ascii') + b"\n")
@@ -296,7 +290,6 @@ class BotLinkMaster:
         if not self.connected:
             return ""
         
-        # Use vendor-specific initial wait if not provided
         if wait_time is None:
             wait_time = self.timeouts['initial_wait']
         
@@ -311,13 +304,7 @@ class BotLinkMaster:
             return ""
     
     def _execute_ssh(self, command: str, wait_time: float) -> str:
-        """
-        BUG FIX v4.6.2: MikroTik SSH partial output
-        - Fixed 16/21 interfaces issue
-        - Vendor-specific timeouts (MikroTik: 3.5s idle timeout)
-        - Better prompt detection
-        - Increased hard timeout for slow devices
-        """
+        """Execute SSH command with idle-time based reading"""
         try:
             self.shell.send(command + "\n")
             time.sleep(wait_time)
@@ -325,14 +312,11 @@ class BotLinkMaster:
             output = ""
             last_data_time = time.time()
             
-            # Use vendor-specific timeouts
             idle_timeout = self.timeouts['idle_timeout']
             hard_timeout = time.time() + self.timeouts['hard_timeout']
             
             consecutive_empty_reads = 0
-            max_consecutive_empty = 5  # Stop if 5 consecutive empty reads
-            
-            logger.debug(f"Vendor: {self.config.vendor}, idle_timeout: {idle_timeout}s")
+            max_consecutive_empty = 5
 
             while True:
                 if self.shell.recv_ready():
@@ -342,7 +326,6 @@ class BotLinkMaster:
                         output += data
                         last_data_time = time.time()
                         consecutive_empty_reads = 0
-                        logger.debug(f"Received {len(data)} bytes")
                         continue
                     else:
                         consecutive_empty_reads += 1
@@ -350,22 +333,14 @@ class BotLinkMaster:
                 now = time.time()
                 idle_time = now - last_data_time
 
-                # EOF detection berbasis idle-time (IMPROVED)
                 if output and idle_time >= idle_timeout:
-                    logger.debug(f"Idle timeout reached: {idle_time:.2f}s >= {idle_timeout}s")
                     break
                 
-                # Stop if too many consecutive empty reads
                 if consecutive_empty_reads >= max_consecutive_empty:
-                    logger.debug(f"Max consecutive empty reads: {consecutive_empty_reads}")
                     break
 
-                # Hard timeout safety guard
                 if now >= hard_timeout:
-                    logger.warning(
-                        f"SSH hard timeout for '{command}', returning output "
-                        f"(got {len(output)} bytes)"
-                    )
+                    logger.warning(f"SSH hard timeout for '{command}'")
                     break
 
                 time.sleep(0.2)
@@ -389,7 +364,6 @@ class BotLinkMaster:
     
     def _clean_output(self, output: str, command: str) -> str:
         """Clean command output"""
-        # Remove ANSI escape codes
         ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
         output = ansi_escape.sub('', output)
         return output
@@ -400,15 +374,12 @@ class BotLinkMaster:
         
         interface_parser = getattr(self.vendor_config, 'interface_parser', 'default')
         
-        # MikroTik special handling
         if interface_parser == 'mikrotik':
             return self._get_mikrotik_interfaces()
         
-        # Cisco NX-OS special handling
         if interface_parser == 'cisco_nxos':
             return self._get_cisco_nxos_interfaces()
         
-        # Other vendors
         cmd = self.vendor_config.show_interface_brief
         output = self.execute_command(cmd, wait_time=3.0)
         
@@ -447,120 +418,46 @@ class BotLinkMaster:
                     logger.info(f"Cisco NX-OS: Parsed {len(interfaces)} interfaces")
                     return interfaces
         
-        # Fallback to default parsing
         return self._parse_default_interfaces(output if output else "")
     
-    def _parse_mikrotik_detail_output(self, output: str) -> List[Dict[str, Any]]:
-        """
-        Parse MikroTik 'interface ethernet print detail without-paging' output
-        
-        Format:
-         1 RS ;;; link Utara 96
-              name="sfp-sfpplus1" default-name="sfp-sfpplus1" ...
-        
-        Where:
-        - 1 = Index
-        - RS = Flags (R=Running/UP, S=Slave, X=Disabled)
-        - ;;; = Comment delimiter
-        - link Utara 96 = Description/comment
-        - name="sfp-sfpplus1" = Interface name on next line
-        """
-        interfaces = []
-        lines = output.split('\n')
-        
-        i = 0
-        while i < len(lines):
-            line = lines[i].strip()
-            
-            # Check if line starts with index number (e.g., "1 RS ;;; description")
-            # Pattern: digit(s) followed by optional flags and optional comment
-            match = re.match(r'^(\d+)\s*([XRSD]*)\s*(?:;;;(.*))?$', line)
-            
-            if match:
-                index = match.group(1)
-                flags = match.group(2) if match.group(2) else ''
-                comment = match.group(3).strip() if match.group(3) else ''
-                
-                # Next line should contain name="interface-name"
-                i += 1
-                if i < len(lines):
-                    next_line = lines[i].strip()
-                    name_match = re.search(r'name="([^"]+)"', next_line)
-                    
-                    if name_match:
-                        name = name_match.group(1)
-                        
-                        # Determine status from flags
-                        # R = Running (UP)
-                        # S = Slave
-                        # X = Disabled (DOWN)
-                        # RS = Running + Slave (UP)
-                        if 'R' in flags:
-                            status = 'up'
-                        elif 'X' in flags:
-                            status = 'down'
-                        else:
-                            # No R flag and no X flag = DOWN
-                            status = 'down'
-                        
-                        interfaces.append({
-                            'name': name,
-                            'status': status,
-                            'flags': flags,
-                            'description': comment,
-                            'index': index
-                        })
-            
-            i += 1
-        
-        logger.info(f"MikroTik detail parser: Found {len(interfaces)} interfaces")
-        return interfaces
-    
     def _get_mikrotik_interfaces(self) -> List[Dict[str, Any]]:
-        """Get MikroTik interfaces with improved timeout and validation"""
+        """
+        Get MikroTik interfaces - FIXED v4.8.1
         
-        # First, get expected count
+        IMPORTANT: Use /interface print brief FIRST to get ALL interface types.
+        /interface ethernet print only shows ethernet/SFP interfaces,
+        missing ether, bridge, vlan, bonding, etc.
+        """
+        
         expected_count = self._get_mikrotik_interface_count()
         if expected_count:
             logger.info(f"MikroTik: Expected {expected_count} interfaces")
         
-        # Use 'detail without-paging' for most reliable output
+        # FIXED v4.8.1: Use /interface print brief FIRST to get ALL interface types
+        # /interface ethernet print only shows ethernet/SFP, missing ether, bridge, vlan, etc.
         commands = [
-            "/interface ethernet print detail without-paging",
-            "/interface print detail without-paging",
             "/interface print brief",
             "/interface print",
+            "/interface print detail without-paging",
         ]
         
         for cmd in commands:
             logger.info(f"MikroTik: Trying {cmd}")
             
-            # Use longer wait for MikroTik interface list
             output = self.execute_command(cmd, wait_time=self.timeouts['initial_wait'])
             
             if output and re.search(r'^\s*\d+\s+', output, re.MULTILINE):
                 logger.info(f"MikroTik: Got {len(output)} bytes from {cmd}")
                 
-                # Use detail parser for 'detail' commands, regular parser for others
-                if 'detail' in cmd.lower():
-                    interfaces = self._parse_mikrotik_detail_output(output)
-                    logger.info(f"MikroTik: Using detail parser")
-                else:
-                    interfaces = parse_mikrotik_interfaces(output)
-                    logger.info(f"MikroTik: Using standard parser")
-                
+                # Use standard parser for brief/print commands
+                interfaces = parse_mikrotik_interfaces(output)
                 logger.info(f"MikroTik: Parsed {len(interfaces)} interfaces")
                 
-                # Log first and last interface for verification
                 if interfaces:
                     logger.info(f"MikroTik: First interface: {interfaces[0]['name']}")
                     logger.info(f"MikroTik: Last interface: {interfaces[-1]['name']}")
                     
-                    # Validate count if we got expected count
-                    # Only retry if:
-                    # 1. Expected count seems reasonable (> 10)
-                    # 2. We got significantly less than expected (< 80%)
-                    # 3. Difference is substantial (>= 5 interfaces)
+                    # Validate count
                     if expected_count and expected_count > 10:
                         ratio = len(interfaces) / expected_count
                         diff = expected_count - len(interfaces)
@@ -568,33 +465,18 @@ class BotLinkMaster:
                         if ratio < 0.8 and diff >= 5:
                             logger.warning(
                                 f"MikroTik: Only got {len(interfaces)}/{expected_count} interfaces "
-                                f"({ratio*100:.0f}%), difference: {diff}. Output may be truncated."
+                                f"({ratio*100:.0f}%). Retrying with longer timeout..."
                             )
-                            # Try with even longer timeout
-                            logger.info("MikroTik: Retrying with longer timeout...")
                             output = self.execute_command(cmd, wait_time=self.timeouts['initial_wait'] + 2.0)
                             if output:
-                                logger.info(f"MikroTik: Retry got {len(output)} bytes")
-                                
-                                # Use same parser as before
-                                if 'detail' in cmd.lower():
-                                    interfaces_retry = self._parse_mikrotik_detail_output(output)
-                                else:
-                                    interfaces_retry = parse_mikrotik_interfaces(output)
-                                
+                                interfaces_retry = parse_mikrotik_interfaces(output)
                                 if len(interfaces_retry) > len(interfaces):
                                     logger.info(f"MikroTik: Retry improved! Got {len(interfaces_retry)} interfaces")
                                     interfaces = interfaces_retry
                         else:
                             logger.info(
-                                f"MikroTik: Count difference acceptable "
-                                f"({len(interfaces)}/{expected_count}, ratio: {ratio*100:.0f}%)"
+                                f"MikroTik: Count OK ({len(interfaces)}/{expected_count}, ratio: {ratio*100:.0f}%)"
                             )
-                    elif expected_count and expected_count <= 10:
-                        logger.info(
-                            f"MikroTik: count-only returned {expected_count}, which seems too low. "
-                            f"Trusting parser result of {len(interfaces)} interfaces."
-                        )
                 
                 return interfaces
         
@@ -607,28 +489,19 @@ class BotLinkMaster:
             output = self.execute_command(cmd, wait_time=2.0)
             
             if output:
-                # Log raw output for debugging
-                logger.debug(f"MikroTik count-only raw output: {repr(output)}")
-                
-                # Try to find a standalone number (likely the count)
-                # Look for number at end of line or standalone
                 lines = output.strip().split('\n')
-                for line in reversed(lines):  # Check from bottom up
+                for line in reversed(lines):
                     line = line.strip()
-                    # Skip empty lines and prompts
                     if not line or line.endswith('>') or line.endswith('#'):
                         continue
-                    # Try to parse as number
                     if line.isdigit():
                         count = int(line)
                         logger.info(f"MikroTik: count-only returned {count}")
                         return count
                 
-                # Fallback: find any number
                 match = re.search(r'\b(\d+)\b', output)
                 if match:
                     count = int(match.group(1))
-                    logger.warning(f"MikroTik: count-only fallback parsing: {count} (may be inaccurate)")
                     return count
         except Exception as e:
             logger.warning(f"MikroTik: Failed to get count: {e}")
@@ -690,11 +563,9 @@ class BotLinkMaster:
     def get_interface_status(self, interface_name: str) -> Dict[str, Any]:
         """Get specific interface status"""
         
-        # MikroTik special handling
         if self.config.vendor.lower() == 'mikrotik':
             return self._get_mikrotik_interface_status(interface_name)
         
-        # Cisco NX-OS special handling
         if self.config.vendor.lower() == 'cisco_nxos':
             return self._get_cisco_nxos_interface_status(interface_name)
         
@@ -725,25 +596,20 @@ class BotLinkMaster:
             'raw_output': '',
         }
         
-        # Try show interface status first (better for status)
         output = self.execute_command("show interface status", wait_time=3.0)
         result['raw_output'] = output
         
         if output:
-            # Parse to find our interface
             for line in output.split('\n'):
                 line_lower = line.lower()
                 iface_lower = interface_name.lower()
                 
-                # Check if this line contains our interface
                 if iface_lower in line_lower or iface_lower.replace('/', '') in line_lower:
                     parts = line.split()
                     if len(parts) >= 3:
-                        # Get description (column 2)
                         if len(parts) >= 2 and parts[1] != '--':
                             result['description'] = parts[1]
                         
-                        # Check status
                         if 'connected' in line_lower and 'notconnect' not in line_lower:
                             result['status'] = 'up'
                         elif 'notconnect' in line_lower:
@@ -754,10 +620,8 @@ class BotLinkMaster:
                             result['status'] = 'down'
                         
                         if result['status'] != 'unknown':
-                            logger.info(f"Cisco NX-OS {interface_name}: status={result['status']}")
                             return result
         
-        # Fallback: use show interface command
         cmd = f"show interface {interface_name}"
         output2 = self.execute_command(cmd, wait_time=3.0)
         
@@ -769,7 +633,7 @@ class BotLinkMaster:
         return result
     
     def _get_mikrotik_interface_status(self, interface_name: str) -> Dict[str, Any]:
-        """Get MikroTik interface status - uses same parser as get_interfaces"""
+        """Get MikroTik interface status"""
         result = {
             'name': interface_name,
             'full_name': interface_name,
@@ -779,14 +643,12 @@ class BotLinkMaster:
             'raw_output': '',
         }
         
-        # Get all interfaces using the working method
         interfaces = self._get_mikrotik_interfaces()
         
         if not interfaces:
             logger.warning(f"MikroTik: No interfaces returned")
             return result
         
-        # Find our interface in the list
         iface_lower = interface_name.lower()
         
         for iface in interfaces:
@@ -794,7 +656,7 @@ class BotLinkMaster:
                 result['status'] = iface.get('status', 'unknown')
                 result['description'] = iface.get('description', '')
                 result['flags'] = iface.get('flags', '')
-                logger.info(f"MikroTik: Found {interface_name}, flags='{result['flags']}', status={result['status']}, desc='{result['description']}'")
+                logger.info(f"MikroTik: Found {interface_name}, flags='{result['flags']}', status={result['status']}")
                 return result
         
         logger.warning(f"MikroTik: Interface '{interface_name}' not found in {len(interfaces)} interfaces")
@@ -809,7 +671,6 @@ class BotLinkMaster:
         if full_interface != interface_name:
             commands.extend(get_optical_commands(self.config.vendor, interface_name))
         
-        # Remove duplicates
         seen = set()
         unique_commands = []
         for cmd in commands:
@@ -897,7 +758,7 @@ class BotLinkMaster:
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("BotLinkMaster v4.8.0 - Network Device Connection Module")
+    print("BotLinkMaster v4.8.1 - Network Device Connection Module")
     print("=" * 60)
     print("\nSupported Vendors:")
     from vendor_commands import get_supported_vendors
