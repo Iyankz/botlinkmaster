@@ -1,23 +1,22 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.8.5 - Network Device Connection Module
+BotLinkMaster v4.8.6 - Network Device Connection Module
 SSH/Telnet support for routers and switches
 
+CHANGELOG v4.8.6:
+- FIX: MikroTik menggunakan "/interface ethernet print without-paging"
+- FIX: Timeout MikroTik ditambah ke 30s untuk device dengan banyak interface
+- FIX: Timeout Huawei ditambah untuk switch tertentu
+- ADD: Huawei "display interface {interface} transceiver brief"
+- IMPROVED: Support unlimited interface count (bukan hanya 16)
+
 CHANGELOG v4.8.5:
-- FIX: MikroTik PAGING issue - interface terakhir tidak muncul
-- FIX: Tambahkan "without-paging" ke semua MikroTik commands
-- FIX: Paging prompt "-- [Q quit|D dump|down]" menyebabkan output terpotong
-
-CHANGELOG v4.8.4:
-- FIX: Comments dengan karakter khusus {}, []
-
-CHANGELOG v4.8.3:
-- FIX: MikroTik SSH - wait for prompt before sending commands
+- FIX: MikroTik paging issue dengan without-paging
 
 Note: OLT support will be available in v5.0.0
 
 Author: BotLinkMaster
-Version: 4.8.5
+Version: 4.8.6
 """
 
 import paramiko
@@ -84,49 +83,53 @@ class BotLinkMaster:
         'aes128-cbc', '3des-cbc',
     ]
     
-    # Vendor-specific timeouts
+    # v4.8.6: Updated vendor-specific timeouts
     VENDOR_TIMEOUTS = {
         'mikrotik': {
-            'idle_timeout': 8.0,
-            'initial_wait': 5.0,
-            'hard_timeout': 60,
-            'prompt_timeout': 15,  # NEW: timeout for waiting prompt
-        },
-        'cisco_nxos': {
-            'idle_timeout': 2.0,
-            'initial_wait': 2.0,
-            'hard_timeout': 20,
-            'prompt_timeout': 10,
+            'idle_timeout': 10.0,      # v4.8.6: Increased from 8.0
+            'initial_wait': 8.0,       # v4.8.6: Increased from 5.0
+            'hard_timeout': 90,        # v4.8.6: Increased from 60 for many interfaces
+            'prompt_timeout': 20,      # v4.8.6: Increased from 15
+            'command_wait': 30.0,      # v4.8.6: NEW - wait time for interface commands
         },
         'huawei': {
-            'idle_timeout': 2.5,
-            'initial_wait': 2.0,
-            'hard_timeout': 20,
+            'idle_timeout': 5.0,       # v4.8.6: Increased from 2.5
+            'initial_wait': 5.0,       # v4.8.6: Increased from 2.0
+            'hard_timeout': 60,        # v4.8.6: Increased from 20
+            'prompt_timeout': 15,      # v4.8.6: Increased from 10
+            'command_wait': 10.0,      # v4.8.6: NEW
+        },
+        'cisco_nxos': {
+            'idle_timeout': 3.0,
+            'initial_wait': 3.0,
+            'hard_timeout': 30,
             'prompt_timeout': 10,
+            'command_wait': 5.0,
         },
         'default': {
-            'idle_timeout': 1.5,
-            'initial_wait': 2.0,
-            'hard_timeout': 20,
+            'idle_timeout': 2.0,
+            'initial_wait': 3.0,
+            'hard_timeout': 30,
             'prompt_timeout': 10,
+            'command_wait': 5.0,
         }
     }
     
     # Prompt patterns for different vendors
     PROMPT_PATTERNS = {
         'mikrotik': [
-            r'\[[\w\-@]+\]\s*[>#]\s*$',      # [admin@MikroTik] > 
-            r'\[[\w\-@]+\]\s*/[\w/]*[>#]\s*$', # [admin@MikroTik] /interface>
+            r'\[[\w\-@]+\]\s*[>#]\s*$',
+            r'\[[\w\-@]+\]\s*/[\w/]*[>#]\s*$',
         ],
         'cisco': [
-            r'[\w\-]+[>#]\s*$',  # Router# or Router>
+            r'[\w\-]+[>#]\s*$',
         ],
         'huawei': [
-            r'<[\w\-]+>\s*$',    # <Router>
-            r'\[[\w\-]+\]\s*$',  # [Router]
+            r'<[\w\-]+>\s*$',
+            r'\[[\w\-]+\]\s*$',
         ],
         'default': [
-            r'[>#\$]\s*$',       # Generic prompt
+            r'[>#\$]\s*$',
         ],
     }
     
@@ -141,19 +144,19 @@ class BotLinkMaster:
         self.connection_method = None
         
         vendor_key = config.vendor.lower()
-        self.timeouts = self.VENDOR_TIMEOUTS.get(
-            vendor_key, 
-            self.VENDOR_TIMEOUTS['default']
-        )
         
-        # Get prompt patterns for this vendor
+        # v4.8.6: Match vendor timeouts more flexibly
         if 'mikrotik' in vendor_key:
+            self.timeouts = self.VENDOR_TIMEOUTS['mikrotik']
             self.prompt_patterns = self.PROMPT_PATTERNS['mikrotik']
-        elif 'cisco' in vendor_key:
-            self.prompt_patterns = self.PROMPT_PATTERNS['cisco']
         elif 'huawei' in vendor_key:
+            self.timeouts = self.VENDOR_TIMEOUTS['huawei']
             self.prompt_patterns = self.PROMPT_PATTERNS['huawei']
+        elif 'cisco' in vendor_key:
+            self.timeouts = self.VENDOR_TIMEOUTS.get('cisco_nxos', self.VENDOR_TIMEOUTS['default'])
+            self.prompt_patterns = self.PROMPT_PATTERNS['cisco']
         else:
+            self.timeouts = self.VENDOR_TIMEOUTS['default']
             self.prompt_patterns = self.PROMPT_PATTERNS['default']
     
     def connect(self) -> bool:
@@ -189,7 +192,7 @@ class BotLinkMaster:
             return False
     
     def _connect_ssh_transport(self) -> bool:
-        """SSH via Transport for legacy devices - FIXED v4.8.3"""
+        """SSH via Transport for legacy devices"""
         self.transport = paramiko.Transport((self.config.host, self.config.port))
         self.transport.set_keepalive(30)
         
@@ -206,8 +209,8 @@ class BotLinkMaster:
         self.shell.get_pty(term='vt100', width=200, height=50)
         self.shell.invoke_shell()
         
-        # v4.8.3: Wait for prompt instead of just sleeping
-        if not self._wait_for_prompt(timeout=self.timeouts.get('prompt_timeout', 15)):
+        # Wait for prompt
+        if not self._wait_for_prompt(timeout=self.timeouts.get('prompt_timeout', 20)):
             logger.warning("Timeout waiting for initial prompt, continuing anyway...")
         
         self._disable_paging()
@@ -218,7 +221,7 @@ class BotLinkMaster:
         return True
     
     def _connect_ssh_standard(self) -> bool:
-        """Standard SSH connection - FIXED v4.8.3"""
+        """Standard SSH connection"""
         self.client = paramiko.SSHClient()
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         
@@ -235,8 +238,7 @@ class BotLinkMaster:
         
         self.shell = self.client.invoke_shell(width=200, height=50)
         
-        # v4.8.3: Wait for prompt instead of just sleeping
-        if not self._wait_for_prompt(timeout=self.timeouts.get('prompt_timeout', 15)):
+        if not self._wait_for_prompt(timeout=self.timeouts.get('prompt_timeout', 20)):
             logger.warning("Timeout waiting for initial prompt, continuing anyway...")
         
         self._disable_paging()
@@ -247,7 +249,7 @@ class BotLinkMaster:
         return True
     
     def _connect_ssh_alternative(self) -> bool:
-        """Alternative SSH connection - FIXED v4.8.3"""
+        """Alternative SSH connection"""
         logger.info("Trying alternative SSH...")
         
         self.client = paramiko.SSHClient()
@@ -265,8 +267,7 @@ class BotLinkMaster:
         
         self.shell = self.client.invoke_shell(width=200, height=50)
         
-        # v4.8.3: Wait for prompt instead of just sleeping
-        if not self._wait_for_prompt(timeout=self.timeouts.get('prompt_timeout', 15)):
+        if not self._wait_for_prompt(timeout=self.timeouts.get('prompt_timeout', 20)):
             logger.warning("Timeout waiting for initial prompt, continuing anyway...")
         
         self._disable_paging()
@@ -276,14 +277,9 @@ class BotLinkMaster:
         logger.info(f"SSH connected (alternative) to {self.config.host}")
         return True
     
-    def _wait_for_prompt(self, timeout: int = 15) -> bool:
+    def _wait_for_prompt(self, timeout: int = 20) -> bool:
         """
-        NEW v4.8.3: Wait for shell prompt to appear
-        
-        This ensures the shell is ready before sending commands.
-        Critical for MikroTik which has a slow banner display.
-        
-        Returns True if prompt found, False if timeout
+        Wait for shell prompt to appear
         """
         logger.info(f"Waiting for prompt (timeout={timeout}s)...")
         
@@ -296,16 +292,12 @@ class BotLinkMaster:
                     data = self.shell.recv(65535).decode('utf-8', errors='ignore')
                     buffer += data
                     
-                    # Log progress
-                    logger.debug(f"Received {len(data)} bytes, total buffer: {len(buffer)}")
-                    
                     # Check for prompt patterns
                     for pattern in self.prompt_patterns:
                         if re.search(pattern, buffer):
                             logger.info(f"Prompt detected! Buffer size: {len(buffer)}")
                             return True
                     
-                    # Also check for generic prompts
                     # MikroTik: ] > or ] # at end of line
                     if re.search(r'\]\s*[>#]\s*$', buffer):
                         logger.info("MikroTik prompt detected!")
@@ -315,14 +307,18 @@ class BotLinkMaster:
                     if re.search(r'[\w\-]+[>#]\s*$', buffer):
                         logger.info("Generic prompt detected!")
                         return True
+                    
+                    # Huawei: <hostname> or [hostname]
+                    if re.search(r'[<\[][\w\-]+[>\]]\s*$', buffer):
+                        logger.info("Huawei prompt detected!")
+                        return True
                         
                 except Exception as e:
                     logger.warning(f"Error reading data: {e}")
             
             time.sleep(0.2)
         
-        # Timeout - log what we got
-        logger.warning(f"Prompt timeout. Buffer ({len(buffer)} bytes): ...{buffer[-200:]}")
+        logger.warning(f"Prompt timeout. Buffer ({len(buffer)} bytes)")
         return False
     
     def _connect_telnet(self) -> bool:
@@ -372,7 +368,7 @@ class BotLinkMaster:
             return ""
         
         if wait_time is None:
-            wait_time = self.timeouts['initial_wait']
+            wait_time = self.timeouts.get('command_wait', self.timeouts['initial_wait'])
         
         try:
             if self.config.protocol == Protocol.SSH:
@@ -386,15 +382,11 @@ class BotLinkMaster:
     
     def _execute_ssh(self, command: str, wait_time: float) -> str:
         """
-        Execute SSH command with idle-time based reading - FIXED v4.8.3
-        
-        v4.8.3 Changes:
-        - Clear buffer before sending command
-        - Wait for prompt after command completion
-        - Better handling of MikroTik output
+        Execute SSH command with idle-time based reading
+        v4.8.6: Improved timing for MikroTik and Huawei
         """
         try:
-            # v4.8.3: Clear any pending data in buffer first
+            # Clear any pending data in buffer first
             while self.shell.recv_ready():
                 self.shell.recv(65535)
             
@@ -412,7 +404,7 @@ class BotLinkMaster:
             hard_timeout = time.time() + self.timeouts['hard_timeout']
             
             consecutive_empty_reads = 0
-            max_consecutive_empty = 10
+            max_consecutive_empty = 15  # v4.8.6: Increased from 10
 
             while True:
                 if self.shell.recv_ready():
@@ -423,10 +415,8 @@ class BotLinkMaster:
                         last_data_time = time.time()
                         consecutive_empty_reads = 0
                         
-                        # v4.8.3: Check if we got a prompt (command complete)
-                        # MikroTik prompt: [user@host] > or [user@host] /path>
+                        # Check if we got a prompt (command complete)
                         if re.search(r'\]\s*[>#/]\s*$', output):
-                            # Got prompt, might be done - do one more read
                             time.sleep(0.5)
                             if self.shell.recv_ready():
                                 extra = self.shell.recv(65535).decode("utf-8", errors="ignore")
@@ -443,7 +433,7 @@ class BotLinkMaster:
 
                 if output and idle_time >= idle_timeout:
                     # Multiple extra reads to ensure we got everything
-                    for _ in range(3):
+                    for _ in range(5):  # v4.8.6: Increased from 3
                         time.sleep(0.5)
                         if self.shell.recv_ready():
                             extra = self.shell.recv(65535).decode("utf-8", errors="ignore")
@@ -453,7 +443,6 @@ class BotLinkMaster:
                     break
                 
                 if consecutive_empty_reads >= max_consecutive_empty:
-                    # Final attempt before giving up
                     time.sleep(1.0)
                     if self.shell.recv_ready():
                         extra = self.shell.recv(65535).decode("utf-8", errors="ignore")
@@ -469,10 +458,6 @@ class BotLinkMaster:
                 time.sleep(0.2)
 
             logger.info(f"Command '{command}': received {len(output)} bytes total")
-            
-            # v4.8.3: Log last 200 chars for debugging
-            if len(output) > 200:
-                logger.debug(f"Last 200 chars: ...{output[-200:]}")
             
             return self._clean_output(output, command)
 
@@ -509,16 +494,16 @@ class BotLinkMaster:
             return self._get_cisco_nxos_interfaces()
         
         cmd = self.vendor_config.show_interface_brief
-        output = self.execute_command(cmd, wait_time=3.0)
+        output = self.execute_command(cmd, wait_time=5.0)
         
         if not output or 'Invalid' in output:
             cmd = self.vendor_config.show_interface_description
-            output = self.execute_command(cmd, wait_time=3.0)
+            output = self.execute_command(cmd, wait_time=5.0)
         
         if not output or 'Invalid' in output:
             for alt_cmd in self.vendor_config.alt_interface_commands:
                 if '{interface}' not in alt_cmd:
-                    output = self.execute_command(alt_cmd, wait_time=3.0)
+                    output = self.execute_command(alt_cmd, wait_time=5.0)
                     if output and 'Invalid' not in output:
                         break
         
@@ -537,7 +522,7 @@ class BotLinkMaster:
         
         for cmd in commands:
             logger.info(f"Cisco NX-OS: Trying {cmd}")
-            output = self.execute_command(cmd, wait_time=4.0)
+            output = self.execute_command(cmd, wait_time=5.0)
             
             if output and ('Eth' in output or 'Po' in output or 'Vlan' in output):
                 logger.info(f"Cisco NX-OS: Got data from {cmd}")
@@ -550,28 +535,30 @@ class BotLinkMaster:
     
     def _get_mikrotik_interfaces(self) -> List[Dict[str, Any]]:
         """
-        Get MikroTik interfaces - FIXED v4.8.3
+        Get MikroTik interfaces - v4.8.6
         
-        v4.8.3 Changes:
-        - Better command execution with prompt waiting
-        - Retry mechanism if interface count doesn't match
+        Uses "/interface ethernet print without-paging" to get only
+        ethernet and SFP interfaces (no bridge/vlan/loopback)
         """
         
         expected_count = self._get_mikrotik_interface_count()
         if expected_count:
-            logger.info(f"MikroTik: Expected {expected_count} interfaces")
+            logger.info(f"MikroTik: Expected approximately {expected_count} interfaces")
         
+        # v4.8.6: Primary command is "ethernet print" not "print brief"
         commands = [
-            "/interface print brief",
-            "/interface print",
-            "/interface print detail without-paging",
+            "/interface ethernet print without-paging",
+            "/interface print brief without-paging",
+            "/interface print without-paging",
         ]
+        
+        # v4.8.6: Use longer wait time for many interfaces
+        wait_time = self.timeouts.get('command_wait', 30.0)
         
         for cmd in commands:
             logger.info(f"MikroTik: Trying {cmd}")
             
-            # v4.8.3: Use longer wait time and ensure proper execution
-            output = self.execute_command(cmd, wait_time=self.timeouts['initial_wait'])
+            output = self.execute_command(cmd, wait_time=wait_time)
             
             if output and re.search(r'^\s*\d+\s+', output, re.MULTILINE):
                 logger.info(f"MikroTik: Got {len(output)} bytes from {cmd}")
@@ -583,37 +570,18 @@ class BotLinkMaster:
                     logger.info(f"MikroTik: First interface: {interfaces[0]['name']}")
                     logger.info(f"MikroTik: Last interface: {interfaces[-1]['name']}")
                     
-                    # v4.8.3: More aggressive retry if count doesn't match
-                    if expected_count and len(interfaces) < expected_count:
-                        missing = expected_count - len(interfaces)
-                        logger.warning(
-                            f"MikroTik: Missing {missing} interfaces "
-                            f"({len(interfaces)}/{expected_count}). Retrying..."
-                        )
-                        
-                        # Retry with longer timeout
-                        time.sleep(2.0)  # Extra delay before retry
-                        output_retry = self.execute_command(cmd, wait_time=self.timeouts['initial_wait'] + 3.0)
-                        
-                        if output_retry:
-                            interfaces_retry = parse_mikrotik_interfaces(output_retry)
-                            if len(interfaces_retry) > len(interfaces):
-                                logger.info(f"MikroTik: Retry improved! Got {len(interfaces_retry)} interfaces")
-                                interfaces = interfaces_retry
-                            elif len(interfaces_retry) == len(interfaces):
-                                logger.info(f"MikroTik: Retry same count ({len(interfaces_retry)})")
-                    else:
-                        logger.info(f"MikroTik: Count OK ({len(interfaces)}/{expected_count})")
-                
-                return interfaces
+                    # v4.8.6: For ethernet print, we might get fewer interfaces than total
+                    # because it excludes bridge/vlan/loopback - this is expected
+                    return interfaces
         
         return []
     
     def _get_mikrotik_interface_count(self) -> int:
         """Get expected interface count from MikroTik"""
         try:
-            cmd = "/interface print count-only"
-            output = self.execute_command(cmd, wait_time=2.0)
+            # v4.8.6: Use ethernet count for more accurate estimate
+            cmd = "/interface ethernet print count-only"
+            output = self.execute_command(cmd, wait_time=3.0)
             
             if output:
                 lines = output.strip().split('\n')
@@ -623,7 +591,7 @@ class BotLinkMaster:
                         continue
                     if line.isdigit():
                         count = int(line)
-                        logger.info(f"MikroTik: count-only returned {count}")
+                        logger.info(f"MikroTik: ethernet count-only returned {count}")
                         return count
                 
                 match = re.search(r'\b(\d+)\b', output)
@@ -699,11 +667,11 @@ class BotLinkMaster:
         full_interface = expand_interface_name(interface_name)
         
         cmd = self.vendor_config.show_interface.format(interface=full_interface)
-        output = self.execute_command(cmd, wait_time=3.0)
+        output = self.execute_command(cmd, wait_time=5.0)
         
         if not output or 'Invalid' in output or 'Error' in output:
             cmd = self.vendor_config.show_interface.format(interface=interface_name)
-            output = self.execute_command(cmd, wait_time=3.0)
+            output = self.execute_command(cmd, wait_time=5.0)
         
         return {
             'name': interface_name,
@@ -723,7 +691,7 @@ class BotLinkMaster:
             'raw_output': '',
         }
         
-        output = self.execute_command("show interface status", wait_time=3.0)
+        output = self.execute_command("show interface status", wait_time=5.0)
         result['raw_output'] = output
         
         if output:
@@ -750,7 +718,7 @@ class BotLinkMaster:
                             return result
         
         cmd = f"show interface {interface_name}"
-        output2 = self.execute_command(cmd, wait_time=3.0)
+        output2 = self.execute_command(cmd, wait_time=5.0)
         
         if output2:
             result['raw_output'] = output2
@@ -809,9 +777,12 @@ class BotLinkMaster:
         result = None
         successful_cmd = None
         
+        # v4.8.6: Use command_wait timeout
+        wait_time = self.timeouts.get('command_wait', 5.0)
+        
         for cmd in unique_commands:
             logger.info(f"Trying optical: {cmd}")
-            output = self.execute_command(cmd, wait_time=3.0)
+            output = self.execute_command(cmd, wait_time=wait_time)
             
             if output:
                 if any(err in output for err in ['Invalid', 'Error', 'Unrecognized', '% ']):
@@ -885,13 +856,15 @@ class BotLinkMaster:
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("BotLinkMaster v4.8.5 - Network Device Connection Module")
+    print("BotLinkMaster v4.8.6 - Network Device Connection Module")
     print("=" * 60)
     print("\nSupported Vendors:")
     from vendor_commands import get_supported_vendors
     for i, v in enumerate(get_supported_vendors(), 1):
         print(f"  {i:2}. {v}")
-    print("\nv4.8.5 Fixes:")
-    print("  - MikroTik paging issue fixed (without-paging)")
-    print("  - All interfaces now captured including last one")
+    print("\nv4.8.6 Improvements:")
+    print("  - MikroTik: /interface ethernet print without-paging")
+    print("  - MikroTik: Timeout 30s for many interfaces")
+    print("  - Huawei: Added transceiver brief command")
+    print("  - Huawei: Increased timeout for large switches")
     print("\nNote: OLT support will be available in v5.0.0")
