@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.8.4 - Network Device Connection Module
+BotLinkMaster v4.8.5 - Network Device Connection Module
 SSH/Telnet support for routers and switches
 
+CHANGELOG v4.8.5:
+- FIX: MikroTik PAGING issue - interface terakhir tidak muncul
+- FIX: Tambahkan "without-paging" ke semua MikroTik commands
+- FIX: Paging prompt "-- [Q quit|D dump|down]" menyebabkan output terpotong
+
 CHANGELOG v4.8.4:
-- FIX: Comments dengan karakter khusus {}, [] menyebabkan interface hilang
-- FIX: sfp-sfpplus16 tidak terbaca karena comment "Cust:xxxx{cvlan}[speed]"
-- IMPROVED: Better MikroTik comment/description handling
+- FIX: Comments dengan karakter khusus {}, []
 
 CHANGELOG v4.8.3:
 - FIX: MikroTik SSH - wait for prompt before sending commands
-- FIX: Commands sent before shell ready (banner issue)
-- NEW: _wait_for_prompt() method for proper shell synchronization
-- NEW: MikroTik-specific prompt detection
 
 Note: OLT support will be available in v5.0.0
 
 Author: BotLinkMaster
-Version: 4.8.4
+Version: 4.8.5
 """
 
 import paramiko
@@ -885,14 +885,13 @@ class BotLinkMaster:
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("BotLinkMaster v4.8.4 - Network Device Connection Module")
+    print("BotLinkMaster v4.8.5 - Network Device Connection Module")
     print("=" * 60)
     print("\nSupported Vendors:")
     from vendor_commands import get_supported_vendors
     for i, v in enumerate(get_supported_vendors(), 1):
         print(f"  {i:2}. {v}")
-    print("\nv4.8.4 Fixes:")
-    print("  - Wait for prompt before sending commands")
-    print("  - Fixed MikroTik banner/timing issue")
-    print("  - Fixed comments with special chars {}, []")
+    print("\nv4.8.5 Fixes:")
+    print("  - MikroTik paging issue fixed (without-paging)")
+    print("  - All interfaces now captured including last one")
     print("\nNote: OLT support will be available in v5.0.0")
