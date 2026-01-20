@@ -92,9 +92,9 @@ class BotLinkMaster:
     # Vendor-specific timeouts - FIXED v4.8.2
     VENDOR_TIMEOUTS = {
         'mikrotik': {
-            'idle_timeout': 6.5,      # Increased from 5.5 - ensure last interface captured
-            'initial_wait': 4.5,      # Increased from 3.5
-            'hard_timeout': 40,       # Increased from 30
+            'idle_timeout': 8.0,      # Increased - ensure ALL interfaces captured
+            'initial_wait': 5.0,      # Increased - wait longer for response
+            'hard_timeout': 60,       # Increased - allow more time
         },
         'cisco_nxos': {
             'idle_timeout': 2.0,
@@ -321,7 +321,7 @@ class BotLinkMaster:
             hard_timeout = time.time() + self.timeouts['hard_timeout']
             
             consecutive_empty_reads = 0
-            max_consecutive_empty = 8  # Increased from 5 to ensure last data captured
+            max_consecutive_empty = 10  # Increased from 8
 
             while True:
                 if self.shell.recv_ready():
@@ -339,16 +339,24 @@ class BotLinkMaster:
                 idle_time = now - last_data_time
 
                 if output and idle_time >= idle_timeout:
-                    # Extra wait to ensure we got everything
-                    time.sleep(0.5)
+                    # v4.8.2: Multiple extra reads to ensure we got everything
+                    for _ in range(3):
+                        time.sleep(0.5)
+                        if self.shell.recv_ready():
+                            extra = self.shell.recv(65535).decode("utf-8", errors="ignore")
+                            if extra:
+                                output += extra
+                                logger.info(f"SSH: Captured extra {len(extra)} bytes after idle timeout")
+                    break
+                
+                if consecutive_empty_reads >= max_consecutive_empty:
+                    # v4.8.2: Final attempt before giving up
+                    time.sleep(1.0)
                     if self.shell.recv_ready():
                         extra = self.shell.recv(65535).decode("utf-8", errors="ignore")
                         if extra:
                             output += extra
-                            logger.info(f"SSH: Captured extra {len(extra)} bytes after idle timeout")
-                    break
-                
-                if consecutive_empty_reads >= max_consecutive_empty:
+                            logger.info(f"SSH: Captured {len(extra)} bytes on final attempt")
                     break
 
                 if now >= hard_timeout:
@@ -358,6 +366,11 @@ class BotLinkMaster:
                 time.sleep(0.2)
 
             logger.info(f"Command '{command}': received {len(output)} bytes total")
+            
+            # v4.8.2: Log last 200 chars for debugging
+            if len(output) > 200:
+                logger.debug(f"Last 200 chars: ...{output[-200:]}")
+            
             return self._clean_output(output, command)
 
         except Exception as e:
