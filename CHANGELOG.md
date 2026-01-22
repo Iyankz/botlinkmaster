@@ -19,11 +19,13 @@ Format berdasarkan [Keep a Changelog](https://keepachangelog.com/id-ID/1.0.0/).
   - `idle_timeout`: 10s → 15s
 - **Huawei CE6855**: Menggunakan `display interface description` (sebelumnya `display interface brief`)
 - **Cisco IOS**: Menggunakan `show interface brief` (sebelumnya `show ip interface brief`)
-- **Telnet**: Perbaikan koneksi dan eksekusi command
-  - Multi-pattern login detection (support berbagai format prompt)
+- **Telnet**: Perbaikan total koneksi dan eksekusi command
+  - **FIX**: Login prompt detection yang salah kirim command sebagai username
+  - Regex-based login detection (`Login:`, `Username:`, `Password:`)
+  - Proper sequence: read banner → detect login → send username → detect password → send password
   - Idle-based reading seperti SSH (tidak lagi hanya `read_very_eager`)
-  - Prompt detection untuk mendeteksi command selesai
-  - Better timeout handling
+  - Better prompt detection untuk command completion
+  - Support MikroTik, Cisco, Huawei, dan vendor lainnya
 - Improved prompt detection untuk semua vendor
 
 ### Added
