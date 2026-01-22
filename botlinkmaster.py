@@ -7,8 +7,12 @@ CHANGELOG v4.8.7:
 - FIX: MikroTik CRS326 SSH algorithm compatibility for RouterOS 7.16.x
 - FIX: Extended timeouts (30s → 60s) for switches with many interfaces
 - FIX: Improved prompt detection for various vendors
+- FIX: Telnet connection now uses proper login detection (multi-pattern)
+- FIX: Telnet execute now uses idle-based reading like SSH
 - ADD: Additional legacy SSH algorithms for older devices
+- ADD: _wait_for_prompt_telnet() method for Telnet prompt detection
 - IMPROVED: Hard timeout increased for slow-responding devices
+- IMPROVED: Telnet now handles various vendor login prompts
 
 CHANGELOG v4.8.6:
 - FIX: MikroTik menggunakan "/interface ethernet print without-paging"
@@ -344,7 +348,7 @@ class BotLinkMaster:
         return False
     
     def _connect_telnet(self) -> bool:
-        """Connect via Telnet"""
+        """Connect via Telnet - v4.8.7 improved with better login handling"""
         try:
             logger.info(f"Connecting to {self.config.host}:{self.config.port} via Telnet...")
             
@@ -354,17 +358,78 @@ class BotLinkMaster:
                 timeout=self.config.timeout
             )
             
-            output = self.client.read_until(b":", timeout=10).decode('utf-8', errors='ignore')
-            if any(p in output.lower() for p in ['username', 'login', 'user']):
-                self.client.write(self.config.username.encode('ascii') + b"\n")
+            # Login patterns for various vendors
+            login_patterns = [
+                b"Username:", b"username:", b"Login:", b"login:", 
+                b"User:", b"user:", b"User Name:", b"user name:",
+                b"Username>", b"login>", b"User>",
+            ]
             
-            output = self.client.read_until(b":", timeout=10).decode('utf-8', errors='ignore')
-            if any(p in output.lower() for p in ['password', 'pass']):
-                self.client.write(self.config.password.encode('ascii') + b"\n")
+            password_patterns = [
+                b"Password:", b"password:", b"Pass:", b"pass:",
+                b"Password>", b"password>",
+            ]
             
+            prompt_patterns = [
+                b">", b"#", b"$", b"]",
+            ]
+            
+            # Wait for login prompt with multiple pattern support
+            login_timeout = self.timeouts.get('prompt_timeout', 30)
+            
+            try:
+                # Read initial banner and wait for login prompt
+                idx, match, output = self.client.expect(
+                    login_patterns + password_patterns + prompt_patterns,
+                    timeout=login_timeout
+                )
+                
+                output_str = output.decode('utf-8', errors='ignore').lower()
+                logger.info(f"Telnet: Initial response received ({len(output)} bytes)")
+                
+                # Check if we need to send username
+                if idx < len(login_patterns) or any(p in output_str for p in ['username', 'login', 'user name', 'user:']):
+                    logger.info("Telnet: Sending username...")
+                    self.client.write(self.config.username.encode('ascii') + b"\r\n")
+                    time.sleep(0.5)
+                    
+                    # Wait for password prompt
+                    idx2, match2, output2 = self.client.expect(
+                        password_patterns + prompt_patterns,
+                        timeout=login_timeout
+                    )
+                    
+                    output_str2 = output2.decode('utf-8', errors='ignore').lower()
+                    
+                    if idx2 < len(password_patterns) or any(p in output_str2 for p in ['password', 'pass:']):
+                        logger.info("Telnet: Sending password...")
+                        self.client.write(self.config.password.encode('ascii') + b"\r\n")
+                
+                # Check if we got password prompt directly (no username required)
+                elif idx >= len(login_patterns) and idx < len(login_patterns) + len(password_patterns):
+                    logger.info("Telnet: Password prompt detected, sending password...")
+                    self.client.write(self.config.password.encode('ascii') + b"\r\n")
+                
+                # Already at prompt (no auth required or auto-login)
+                else:
+                    logger.info("Telnet: Already at prompt or no auth required")
+                
+            except EOFError:
+                logger.error("Telnet: Connection closed by remote host")
+                return False
+            
+            # Wait for command prompt after login
             time.sleep(2)
-            self.client.read_very_eager()
+            if not self._wait_for_prompt_telnet(timeout=login_timeout):
+                logger.warning("Telnet: Timeout waiting for prompt after login, continuing anyway...")
             
+            # Clear any remaining data in buffer
+            try:
+                self.client.read_very_eager()
+            except:
+                pass
+            
+            # Disable paging
             self._disable_paging_telnet()
             
             self.connected = True
@@ -372,9 +437,40 @@ class BotLinkMaster:
             logger.info(f"Telnet connected to {self.config.host}")
             return True
             
+        except socket.timeout:
+            logger.error(f"Telnet connection timeout to {self.config.host}")
+            return False
+        except ConnectionRefusedError:
+            logger.error(f"Telnet connection refused by {self.config.host}")
+            return False
         except Exception as e:
             logger.error(f"Telnet error: {str(e)}")
             return False
+    
+    def _wait_for_prompt_telnet(self, timeout: int = 30) -> bool:
+        """Wait for Telnet shell prompt to appear - v4.8.7"""
+        logger.info(f"Telnet: Waiting for prompt (timeout={timeout}s)...")
+        
+        # Prompt patterns as bytes for telnetlib
+        prompt_regexes = [
+            rb'\[[\w\-@]+\]\s*[>#]\s*$',      # MikroTik: [admin@router] >
+            rb'[\w\-]+[>#]\s*$',               # Cisco/Generic: Router#
+            rb'<[\w\-]+>\s*$',                 # Huawei: <Router>
+            rb'\[[\w\-~]+\]\s*$',              # Huawei config: [Router]
+            rb'[\w\-]+\$\s*$',                 # Linux: user$
+        ]
+        
+        try:
+            idx, match, data = self.client.expect(prompt_regexes, timeout=timeout)
+            if idx >= 0:
+                logger.info(f"Telnet: Prompt detected! Pattern index: {idx}")
+                return True
+        except EOFError:
+            logger.warning("Telnet: Connection closed while waiting for prompt")
+        except Exception as e:
+            logger.warning(f"Telnet: Error waiting for prompt: {e}")
+        
+        return False
     
     def _disable_paging(self):
         if self.vendor_config.disable_paging:
@@ -485,11 +581,110 @@ class BotLinkMaster:
             return ""
     
     def _execute_telnet(self, command: str, wait_time: float) -> str:
+        """Execute Telnet command with idle-time based reading - v4.8.7 improved"""
         try:
-            self.client.write(command.encode('ascii') + b"\n")
+            # Clear any pending data in buffer first
+            try:
+                self.client.read_very_eager()
+            except:
+                pass
+            
+            # Send command
+            logger.info(f"Telnet executing: {command}")
+            self.client.write(command.encode('ascii') + b"\r\n")
+            
+            # Initial wait for command to be processed
             time.sleep(wait_time)
-            output = self.client.read_very_eager().decode('utf-8', errors='ignore')
+            
+            output = ""
+            last_data_time = time.time()
+            
+            idle_timeout = self.timeouts['idle_timeout']
+            hard_timeout = time.time() + self.timeouts['hard_timeout']
+            
+            consecutive_empty_reads = 0
+            max_consecutive_empty = 20
+            
+            # Prompt patterns for detecting command completion
+            prompt_patterns = [
+                r'\[[\w\-@]+\]\s*[>#/]\s*$',    # MikroTik
+                r'[\w\-]+[>#]\s*$',              # Cisco/Generic
+                r'<[\w\-]+>\s*$',                # Huawei
+                r'\[[\w\-~]+\]\s*$',             # Huawei config
+            ]
+            
+            while True:
+                try:
+                    # Read available data (non-blocking with short timeout)
+                    data = self.client.read_very_eager().decode('utf-8', errors='ignore')
+                    
+                    if data:
+                        output += data
+                        last_data_time = time.time()
+                        consecutive_empty_reads = 0
+                        
+                        # Check if we got a prompt (command complete)
+                        for pattern in prompt_patterns:
+                            if re.search(pattern, output):
+                                # Extra read to ensure all data captured
+                                time.sleep(0.3)
+                                try:
+                                    extra = self.client.read_very_eager().decode('utf-8', errors='ignore')
+                                    if extra:
+                                        output += extra
+                                except:
+                                    pass
+                                logger.info(f"Telnet: Prompt detected, command complete")
+                                return self._clean_output(output, command)
+                    else:
+                        consecutive_empty_reads += 1
+                    
+                except EOFError:
+                    logger.warning("Telnet: Connection closed during command execution")
+                    break
+                except Exception as e:
+                    consecutive_empty_reads += 1
+                
+                now = time.time()
+                idle_time = now - last_data_time
+                
+                # Check idle timeout
+                if output and idle_time >= idle_timeout:
+                    # Multiple extra reads to ensure we got everything
+                    for _ in range(5):
+                        time.sleep(0.3)
+                        try:
+                            extra = self.client.read_very_eager().decode('utf-8', errors='ignore')
+                            if extra:
+                                output += extra
+                                logger.info(f"Telnet: Captured extra {len(extra)} bytes after idle timeout")
+                        except:
+                            pass
+                    break
+                
+                # Check consecutive empty reads
+                if consecutive_empty_reads >= max_consecutive_empty:
+                    time.sleep(0.5)
+                    try:
+                        extra = self.client.read_very_eager().decode('utf-8', errors='ignore')
+                        if extra:
+                            output += extra
+                            logger.info(f"Telnet: Captured {len(extra)} bytes on final attempt")
+                    except:
+                        pass
+                    break
+                
+                # Check hard timeout
+                if now >= hard_timeout:
+                    logger.warning(f"Telnet hard timeout for '{command}'")
+                    break
+                
+                time.sleep(0.2)
+            
+            logger.info(f"Telnet command '{command}': received {len(output)} bytes total")
+            
             return self._clean_output(output, command)
+            
         except Exception as e:
             logger.error(f"Telnet execute error: {str(e)}")
             return ""
@@ -877,4 +1072,6 @@ if __name__ == "__main__":
     print("  - Extended timeouts for large switches")
     print("  - Improved prompt detection")
     print("  - Additional legacy SSH algorithms")
+    print("  - Telnet: Multi-pattern login detection")
+    print("  - Telnet: Idle-based reading (like SSH)")
     print("\nNote: OLT support will be available in v5.0.0")
