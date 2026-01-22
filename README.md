@@ -18,6 +18,11 @@ Bot Telegram untuk monitoring perangkat jaringan (router dan switch) dengan duku
 ![Multi Vendor](https://img.shields.io/badge/Vendor-18%2B-success?style=for-the-badge)
 ![License](https://img.shields.io/github/license/Iyankz/botlinkmaster?style=for-the-badge)
 
+---
+
+☕ **Setiap baris kode mengandung 1 gram kafein Arabika — karena solusi yang baik lahir dari fokus dan konsistensi.**
+
+---
 
 ## Fitur Utama
 
