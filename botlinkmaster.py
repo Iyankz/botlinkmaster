@@ -7,12 +7,13 @@ CHANGELOG v4.8.7:
 - FIX: MikroTik CRS326 SSH algorithm compatibility for RouterOS 7.16.x
 - FIX: Extended timeouts (30s → 60s) for switches with many interfaces
 - FIX: Improved prompt detection for various vendors
-- FIX: Telnet connection now uses proper login detection (multi-pattern)
+- FIX: Telnet login detection - was sending commands as username!
+- FIX: Telnet now properly detects Login:/Username:/Password: prompts
 - FIX: Telnet execute now uses idle-based reading like SSH
 - ADD: Additional legacy SSH algorithms for older devices
 - ADD: _wait_for_prompt_telnet() method for Telnet prompt detection
 - IMPROVED: Hard timeout increased for slow-responding devices
-- IMPROVED: Telnet now handles various vendor login prompts
+- IMPROVED: Telnet login sequence: banner → login → password → prompt
 
 CHANGELOG v4.8.6:
 - FIX: MikroTik menggunakan "/interface ethernet print without-paging"
@@ -348,7 +349,7 @@ class BotLinkMaster:
         return False
     
     def _connect_telnet(self) -> bool:
-        """Connect via Telnet - v4.8.7 improved with better login handling"""
+        """Connect via Telnet - v4.8.7 fixed for MikroTik and other vendors"""
         try:
             logger.info(f"Connecting to {self.config.host}:{self.config.port} via Telnet...")
             
@@ -358,74 +359,109 @@ class BotLinkMaster:
                 timeout=self.config.timeout
             )
             
-            # Login patterns for various vendors
-            login_patterns = [
-                b"Username:", b"username:", b"Login:", b"login:", 
-                b"User:", b"user:", b"User Name:", b"user name:",
-                b"Username>", b"login>", b"User>",
-            ]
-            
-            password_patterns = [
-                b"Password:", b"password:", b"Pass:", b"pass:",
-                b"Password>", b"password>",
-            ]
-            
-            prompt_patterns = [
-                b">", b"#", b"$", b"]",
-            ]
-            
-            # Wait for login prompt with multiple pattern support
             login_timeout = self.timeouts.get('prompt_timeout', 30)
             
+            # Read initial data (banner, etc)
+            time.sleep(1)
+            initial_data = b""
             try:
-                # Read initial banner and wait for login prompt
-                idx, match, output = self.client.expect(
-                    login_patterns + password_patterns + prompt_patterns,
-                    timeout=login_timeout
-                )
-                
-                output_str = output.decode('utf-8', errors='ignore').lower()
-                logger.info(f"Telnet: Initial response received ({len(output)} bytes)")
-                
-                # Check if we need to send username
-                if idx < len(login_patterns) or any(p in output_str for p in ['username', 'login', 'user name', 'user:']):
-                    logger.info("Telnet: Sending username...")
-                    self.client.write(self.config.username.encode('ascii') + b"\r\n")
-                    time.sleep(0.5)
+                initial_data = self.client.read_very_eager()
+            except:
+                pass
+            
+            initial_str = initial_data.decode('utf-8', errors='ignore')
+            logger.info(f"Telnet: Initial data ({len(initial_data)} bytes): {initial_str[:200]}")
+            
+            # Determine if we need to login based on initial data or wait for prompt
+            need_login = False
+            need_password = False
+            
+            # Check initial data for login prompt
+            initial_lower = initial_str.lower()
+            if any(p in initial_lower for p in ['login:', 'login :', 'username:', 'username :', 'user:', 'user :']):
+                need_login = True
+            elif any(p in initial_lower for p in ['password:', 'password :']):
+                need_password = True
+            
+            # If no prompt in initial data, wait for it
+            if not need_login and not need_password:
+                logger.info("Telnet: Waiting for login prompt...")
+                try:
+                    # Wait specifically for login or password prompt
+                    login_patterns = [
+                        rb'[Ll]ogin\s*:', rb'[Uu]sername\s*:', rb'[Uu]ser\s*:',
+                        rb'[Pp]assword\s*:',
+                        rb'[>#\]]\s*$',  # Already at command prompt
+                    ]
+                    idx, match, data = self.client.expect(login_patterns, timeout=login_timeout)
                     
-                    # Wait for password prompt
-                    idx2, match2, output2 = self.client.expect(
-                        password_patterns + prompt_patterns,
+                    data_str = data.decode('utf-8', errors='ignore').lower()
+                    logger.info(f"Telnet: Got prompt, pattern index: {idx}")
+                    
+                    if idx in [0, 1, 2]:  # Login/Username prompt
+                        need_login = True
+                    elif idx == 3:  # Password prompt
+                        need_password = True
+                    elif idx == 4:  # Already at command prompt
+                        logger.info("Telnet: Already at command prompt, no login needed")
+                        need_login = False
+                        need_password = False
+                    else:
+                        # Check string content
+                        if 'login' in data_str or 'username' in data_str:
+                            need_login = True
+                        elif 'password' in data_str:
+                            need_password = True
+                            
+                except Exception as e:
+                    logger.warning(f"Telnet: Error waiting for prompt: {e}")
+                    # Try sending username anyway for some devices
+                    need_login = True
+            
+            # Send username if needed
+            if need_login:
+                logger.info(f"Telnet: Sending username: {self.config.username}")
+                self.client.write(self.config.username.encode('ascii') + b"\r\n")
+                time.sleep(0.5)
+                
+                # Wait for password prompt
+                try:
+                    idx, match, data = self.client.expect(
+                        [rb'[Pp]assword\s*:', rb'[>#\]]\s*$'],
                         timeout=login_timeout
                     )
+                    data_str = data.decode('utf-8', errors='ignore').lower()
                     
-                    output_str2 = output2.decode('utf-8', errors='ignore').lower()
-                    
-                    if idx2 < len(password_patterns) or any(p in output_str2 for p in ['password', 'pass:']):
-                        logger.info("Telnet: Sending password...")
-                        self.client.write(self.config.password.encode('ascii') + b"\r\n")
-                
-                # Check if we got password prompt directly (no username required)
-                elif idx >= len(login_patterns) and idx < len(login_patterns) + len(password_patterns):
-                    logger.info("Telnet: Password prompt detected, sending password...")
-                    self.client.write(self.config.password.encode('ascii') + b"\r\n")
-                
-                # Already at prompt (no auth required or auto-login)
-                else:
-                    logger.info("Telnet: Already at prompt or no auth required")
-                
-            except EOFError:
-                logger.error("Telnet: Connection closed by remote host")
-                return False
+                    if idx == 0 or 'password' in data_str:
+                        need_password = True
+                    else:
+                        logger.info("Telnet: No password required")
+                        
+                except Exception as e:
+                    logger.warning(f"Telnet: Error waiting for password prompt: {e}")
+                    # Assume password is needed
+                    need_password = True
+            
+            # Send password if needed
+            if need_password:
+                logger.info("Telnet: Sending password...")
+                self.client.write(self.config.password.encode('ascii') + b"\r\n")
+                time.sleep(1)
             
             # Wait for command prompt after login
-            time.sleep(2)
+            logger.info("Telnet: Waiting for command prompt after login...")
             if not self._wait_for_prompt_telnet(timeout=login_timeout):
-                logger.warning("Telnet: Timeout waiting for prompt after login, continuing anyway...")
+                # Try one more time with longer wait
+                time.sleep(2)
+                if not self._wait_for_prompt_telnet(timeout=10):
+                    logger.warning("Telnet: Timeout waiting for prompt after login, continuing anyway...")
             
             # Clear any remaining data in buffer
+            time.sleep(0.5)
             try:
-                self.client.read_very_eager()
+                remaining = self.client.read_very_eager()
+                if remaining:
+                    logger.info(f"Telnet: Cleared {len(remaining)} bytes from buffer")
             except:
                 pass
             
@@ -1072,6 +1108,7 @@ if __name__ == "__main__":
     print("  - Extended timeouts for large switches")
     print("  - Improved prompt detection")
     print("  - Additional legacy SSH algorithms")
-    print("  - Telnet: Multi-pattern login detection")
+    print("  - Telnet: Fixed login detection (was sending cmd as username)")
+    print("  - Telnet: Proper Login:/Username:/Password: detection")
     print("  - Telnet: Idle-based reading (like SSH)")
     print("\nNote: OLT support will be available in v5.0.0")
