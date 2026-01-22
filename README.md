@@ -163,11 +163,11 @@ cp botlinkmaster.db botlinkmaster.db.bak
 cp .env .env.bak
 
 # 3. Update files
-wget -O telegram_bot.py https://raw.githubusercontent.com/YOUR_USERNAME/botlinkmaster/main/telegram_bot.py
-wget -O botlinkmaster.py https://raw.githubusercontent.com/YOUR_USERNAME/botlinkmaster/main/botlinkmaster.py
-wget -O database.py https://raw.githubusercontent.com/YOUR_USERNAME/botlinkmaster/main/database.py
-wget -O vendor_commands.py https://raw.githubusercontent.com/YOUR_USERNAME/botlinkmaster/main/vendor_commands.py
-wget -O timezone_config.py https://raw.githubusercontent.com/YOUR_USERNAME/botlinkmaster/main/timezone_config.py
+wget -O telegram_bot.py https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/telegram_bot.py
+wget -O botlinkmaster.py https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/botlinkmaster.py
+wget -O database.py https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/database.py
+wget -O vendor_commands.py https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/vendor_commands.py
+wget -O timezone_config.py https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/timezone_config.py
 
 # 4. Restart
 sudo systemctl restart botlinkmaster
