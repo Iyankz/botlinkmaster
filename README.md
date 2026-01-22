@@ -403,29 +403,6 @@ sudo journalctl -u botlinkmaster -f
 sudo systemctl restart botlinkmaster
 ```
 
-### MikroTik CRS326/CRS317 tidak merespons
-
-v4.8.7 sudah memperbaiki masalah ini:
-- Extended timeout untuk switch besar
-- Support algorithm legacy SSH
-- Improved prompt detection
-
-Jika masih bermasalah:
-1. Pastikan vendor diset ke `mikrotik`
-2. Pastikan user SSH memiliki akses penuh
-3. Cek RouterOS version (minimum v6.x)
-
-### Huawei CE6855 interface tidak lengkap
-
-v4.8.7 fix:
-- Menggunakan `display interface description` untuk list interface
-- Extended timeout untuk switch dengan banyak port
-
-### Cisco IOS interface brief error
-
-v4.8.7 fix:
-- Menggunakan `show interface brief` (bukan `show ip interface brief`)
-
 ### Error: Connection Timeout
 
 1. Pastikan IP dan port benar
@@ -454,7 +431,7 @@ sudo journalctl -u botlinkmaster -f   # Live log
 
 ---
 
-## 📝 Changelog
+## 📝 [Changelog](CHANGELOG.md)
 
 ### v4.8.7 — Bug Fixes & Compatibility
 **Release Type:** Bug Fix (Non-breaking)
@@ -474,33 +451,6 @@ sudo journalctl -u botlinkmaster -f   # Live log
 - Tidak ada perubahan API
 - Aman untuk upgrade dari v4.5.x, v4.6.x, v4.7.x, v4.8.x
 - Database compatible dengan versi sebelumnya
-
----
-
-### v4.8.6 — MikroTik & Huawei Improvements
-
-#### Fixed
-- MikroTik menggunakan `/interface ethernet print without-paging`
-- Support unlimited interface count
-- Huawei transceiver brief command
-
----
-
-### v4.7.0 — Multi-Vendor Expansion
-
-#### Added
-- Support 18 vendor
-- Optical power monitoring
-- Interface pagination
-
----
-
-### v4.6.0 — Initial Stable Release
-
-#### Added
-- Multi-vendor support
-- SSH dan Telnet support
-- Legacy device compatibility
 
 ---
 
