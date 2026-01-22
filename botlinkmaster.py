@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.8.6 - Network Device Connection Module
+BotLinkMaster v4.8.7 - Network Device Connection Module
 SSH/Telnet support for routers and switches
+
+CHANGELOG v4.8.7:
+- FIX: MikroTik CRS326 SSH algorithm compatibility for RouterOS 7.16.x
+- FIX: Extended timeouts (30s → 60s) for switches with many interfaces
+- FIX: Improved prompt detection for various vendors
+- ADD: Additional legacy SSH algorithms for older devices
+- IMPROVED: Hard timeout increased for slow-responding devices
 
 CHANGELOG v4.8.6:
 - FIX: MikroTik menggunakan "/interface ethernet print without-paging"
 - FIX: Timeout MikroTik ditambah ke 30s untuk device dengan banyak interface
-- FIX: Timeout Huawei ditambah untuk switch tertentu
-- ADD: Huawei "display interface {interface} transceiver brief"
-- IMPROVED: Support unlimited interface count (bukan hanya 16)
-
-CHANGELOG v4.8.5:
-- FIX: MikroTik paging issue dengan without-paging
 
 Note: OLT support will be available in v5.0.0
 
 Author: BotLinkMaster
-Version: 4.8.6
+Version: 4.8.7
 """
 
 import paramiko
@@ -65,53 +66,69 @@ class ConnectionConfig:
 class BotLinkMaster:
     """Main class for network device connections and monitoring"""
     
+    # v4.8.7: Extended legacy key types for CRS326 compatibility
     LEGACY_KEY_TYPES = [
         'ssh-rsa', 'rsa-sha2-256', 'rsa-sha2-512',
-        'ssh-dss', 'ecdsa-sha2-nistp256', 'ssh-ed25519'
+        'ssh-dss', 'ecdsa-sha2-nistp256', 'ecdsa-sha2-nistp384',
+        'ecdsa-sha2-nistp521', 'ssh-ed25519'
     ]
     
+    # v4.8.7: Extended KEX algorithms for RouterOS 7.16.x
     LEGACY_KEX = [
+        'curve25519-sha256', 'curve25519-sha256@libssh.org',
+        'ecdh-sha2-nistp256', 'ecdh-sha2-nistp384', 'ecdh-sha2-nistp521',
+        'diffie-hellman-group-exchange-sha256',
+        'diffie-hellman-group14-sha256',
         'diffie-hellman-group14-sha1',
         'diffie-hellman-group1-sha1',
         'diffie-hellman-group-exchange-sha1',
-        'diffie-hellman-group-exchange-sha256',
-        'ecdh-sha2-nistp256',
     ]
     
+    # v4.8.7: Extended ciphers for legacy devices
     LEGACY_CIPHERS = [
         'aes128-ctr', 'aes192-ctr', 'aes256-ctr',
-        'aes128-cbc', '3des-cbc',
+        'aes128-gcm@openssh.com', 'aes256-gcm@openssh.com',
+        'chacha20-poly1305@openssh.com',
+        'aes128-cbc', 'aes192-cbc', 'aes256-cbc',
+        '3des-cbc',
     ]
     
-    # v4.8.6: Updated vendor-specific timeouts
+    # v4.8.7: Updated vendor-specific timeouts with extended values
     VENDOR_TIMEOUTS = {
         'mikrotik': {
-            'idle_timeout': 10.0,      # v4.8.6: Increased from 8.0
-            'initial_wait': 8.0,       # v4.8.6: Increased from 5.0
-            'hard_timeout': 90,        # v4.8.6: Increased from 60 for many interfaces
-            'prompt_timeout': 20,      # v4.8.6: Increased from 15
-            'command_wait': 30.0,      # v4.8.6: NEW - wait time for interface commands
+            'idle_timeout': 15.0,      # v4.8.7: Increased from 10.0
+            'initial_wait': 10.0,      # v4.8.7: Increased from 8.0
+            'hard_timeout': 120,       # v4.8.7: Increased from 90 for CRS326
+            'prompt_timeout': 30,      # v4.8.7: Increased from 20
+            'command_wait': 45.0,      # v4.8.7: Increased from 30.0
         },
         'huawei': {
-            'idle_timeout': 5.0,       # v4.8.6: Increased from 2.5
-            'initial_wait': 5.0,       # v4.8.6: Increased from 2.0
-            'hard_timeout': 60,        # v4.8.6: Increased from 20
-            'prompt_timeout': 15,      # v4.8.6: Increased from 10
-            'command_wait': 10.0,      # v4.8.6: NEW
+            'idle_timeout': 8.0,       # v4.8.7: Increased from 5.0
+            'initial_wait': 8.0,       # v4.8.7: Increased from 5.0
+            'hard_timeout': 90,        # v4.8.7: Increased from 60
+            'prompt_timeout': 20,      # v4.8.7: Increased from 15
+            'command_wait': 15.0,      # v4.8.7: Increased from 10.0
         },
         'cisco_nxos': {
-            'idle_timeout': 3.0,
-            'initial_wait': 3.0,
-            'hard_timeout': 30,
-            'prompt_timeout': 10,
-            'command_wait': 5.0,
+            'idle_timeout': 5.0,
+            'initial_wait': 5.0,
+            'hard_timeout': 60,
+            'prompt_timeout': 15,
+            'command_wait': 10.0,
+        },
+        'cisco_ios': {
+            'idle_timeout': 5.0,
+            'initial_wait': 5.0,
+            'hard_timeout': 60,
+            'prompt_timeout': 15,
+            'command_wait': 10.0,
         },
         'default': {
-            'idle_timeout': 2.0,
-            'initial_wait': 3.0,
-            'hard_timeout': 30,
-            'prompt_timeout': 10,
-            'command_wait': 5.0,
+            'idle_timeout': 5.0,
+            'initial_wait': 5.0,
+            'hard_timeout': 60,
+            'prompt_timeout': 15,
+            'command_wait': 10.0,
         }
     }
     
@@ -126,7 +143,7 @@ class BotLinkMaster:
         ],
         'huawei': [
             r'<[\w\-]+>\s*$',
-            r'\[[\w\-]+\]\s*$',
+            r'\[[\w\-~]+\]\s*$',
         ],
         'default': [
             r'[>#\$]\s*$',
@@ -145,7 +162,7 @@ class BotLinkMaster:
         
         vendor_key = config.vendor.lower()
         
-        # v4.8.6: Match vendor timeouts more flexibly
+        # v4.8.7: Match vendor timeouts more flexibly
         if 'mikrotik' in vendor_key:
             self.timeouts = self.VENDOR_TIMEOUTS['mikrotik']
             self.prompt_patterns = self.PROMPT_PATTERNS['mikrotik']
@@ -153,7 +170,10 @@ class BotLinkMaster:
             self.timeouts = self.VENDOR_TIMEOUTS['huawei']
             self.prompt_patterns = self.PROMPT_PATTERNS['huawei']
         elif 'cisco' in vendor_key:
-            self.timeouts = self.VENDOR_TIMEOUTS.get('cisco_nxos', self.VENDOR_TIMEOUTS['default'])
+            if 'nxos' in vendor_key:
+                self.timeouts = self.VENDOR_TIMEOUTS['cisco_nxos']
+            else:
+                self.timeouts = self.VENDOR_TIMEOUTS['cisco_ios']
             self.prompt_patterns = self.PROMPT_PATTERNS['cisco']
         else:
             self.timeouts = self.VENDOR_TIMEOUTS['default']
@@ -171,20 +191,23 @@ class BotLinkMaster:
             return False
     
     def _connect_ssh(self) -> bool:
-        """Connect via SSH with legacy algorithm support"""
+        """Connect via SSH with legacy algorithm support - v4.8.7"""
         try:
             logger.info(f"Connecting to {self.config.host}:{self.config.port} via SSH...")
             
+            # v4.8.7: Try transport method first (better for legacy devices like CRS326)
             try:
                 return self._connect_ssh_transport()
             except Exception as e:
                 logger.warning(f"Transport method failed: {e}")
             
+            # Try standard method
             try:
                 return self._connect_ssh_standard()
             except Exception as e:
                 logger.warning(f"Standard method failed: {e}")
             
+            # Try alternative method
             return self._connect_ssh_alternative()
             
         except Exception as e:
@@ -192,10 +215,11 @@ class BotLinkMaster:
             return False
     
     def _connect_ssh_transport(self) -> bool:
-        """SSH via Transport for legacy devices"""
+        """SSH via Transport for legacy devices - v4.8.7 improved"""
         self.transport = paramiko.Transport((self.config.host, self.config.port))
         self.transport.set_keepalive(30)
         
+        # v4.8.7: Set extended algorithms for CRS326 compatibility
         self.transport._preferred_keys = self.LEGACY_KEY_TYPES
         self.transport._preferred_kex = self.LEGACY_KEX
         self.transport._preferred_ciphers = self.LEGACY_CIPHERS
@@ -210,7 +234,7 @@ class BotLinkMaster:
         self.shell.invoke_shell()
         
         # Wait for prompt
-        if not self._wait_for_prompt(timeout=self.timeouts.get('prompt_timeout', 20)):
+        if not self._wait_for_prompt(timeout=self.timeouts.get('prompt_timeout', 30)):
             logger.warning("Timeout waiting for initial prompt, continuing anyway...")
         
         self._disable_paging()
@@ -238,7 +262,7 @@ class BotLinkMaster:
         
         self.shell = self.client.invoke_shell(width=200, height=50)
         
-        if not self._wait_for_prompt(timeout=self.timeouts.get('prompt_timeout', 20)):
+        if not self._wait_for_prompt(timeout=self.timeouts.get('prompt_timeout', 30)):
             logger.warning("Timeout waiting for initial prompt, continuing anyway...")
         
         self._disable_paging()
@@ -267,7 +291,7 @@ class BotLinkMaster:
         
         self.shell = self.client.invoke_shell(width=200, height=50)
         
-        if not self._wait_for_prompt(timeout=self.timeouts.get('prompt_timeout', 20)):
+        if not self._wait_for_prompt(timeout=self.timeouts.get('prompt_timeout', 30)):
             logger.warning("Timeout waiting for initial prompt, continuing anyway...")
         
         self._disable_paging()
@@ -277,10 +301,8 @@ class BotLinkMaster:
         logger.info(f"SSH connected (alternative) to {self.config.host}")
         return True
     
-    def _wait_for_prompt(self, timeout: int = 20) -> bool:
-        """
-        Wait for shell prompt to appear
-        """
+    def _wait_for_prompt(self, timeout: int = 30) -> bool:
+        """Wait for shell prompt to appear - v4.8.7 improved"""
         logger.info(f"Waiting for prompt (timeout={timeout}s)...")
         
         buffer = ""
@@ -309,7 +331,7 @@ class BotLinkMaster:
                         return True
                     
                     # Huawei: <hostname> or [hostname]
-                    if re.search(r'[<\[][\w\-]+[>\]]\s*$', buffer):
+                    if re.search(r'[<\[][\w\-~]+[>\]]\s*$', buffer):
                         logger.info("Huawei prompt detected!")
                         return True
                         
@@ -356,11 +378,11 @@ class BotLinkMaster:
     
     def _disable_paging(self):
         if self.vendor_config.disable_paging:
-            self._execute_ssh(self.vendor_config.disable_paging, 1.0)
+            self._execute_ssh(self.vendor_config.disable_paging, 2.0)
     
     def _disable_paging_telnet(self):
         if self.vendor_config.disable_paging:
-            self._execute_telnet(self.vendor_config.disable_paging, 1.0)
+            self._execute_telnet(self.vendor_config.disable_paging, 2.0)
     
     def execute_command(self, command: str, wait_time: float = None) -> str:
         """Execute command with vendor-specific timeout if not specified"""
@@ -381,10 +403,7 @@ class BotLinkMaster:
             return ""
     
     def _execute_ssh(self, command: str, wait_time: float) -> str:
-        """
-        Execute SSH command with idle-time based reading
-        v4.8.6: Improved timing for MikroTik and Huawei
-        """
+        """Execute SSH command with idle-time based reading - v4.8.7 improved"""
         try:
             # Clear any pending data in buffer first
             while self.shell.recv_ready():
@@ -404,7 +423,7 @@ class BotLinkMaster:
             hard_timeout = time.time() + self.timeouts['hard_timeout']
             
             consecutive_empty_reads = 0
-            max_consecutive_empty = 15  # v4.8.6: Increased from 10
+            max_consecutive_empty = 20  # v4.8.7: Increased from 15
 
             while True:
                 if self.shell.recv_ready():
@@ -433,7 +452,7 @@ class BotLinkMaster:
 
                 if output and idle_time >= idle_timeout:
                     # Multiple extra reads to ensure we got everything
-                    for _ in range(5):  # v4.8.6: Increased from 3
+                    for _ in range(7):  # v4.8.7: Increased from 5
                         time.sleep(0.5)
                         if self.shell.recv_ready():
                             extra = self.shell.recv(65535).decode("utf-8", errors="ignore")
@@ -534,26 +553,21 @@ class BotLinkMaster:
         return self._parse_default_interfaces(output if output else "")
     
     def _get_mikrotik_interfaces(self) -> List[Dict[str, Any]]:
-        """
-        Get MikroTik interfaces - v4.8.6
-        
-        Uses "/interface ethernet print without-paging" to get only
-        ethernet and SFP interfaces (no bridge/vlan/loopback)
-        """
+        """Get MikroTik interfaces - v4.8.7 improved for CRS326"""
         
         expected_count = self._get_mikrotik_interface_count()
         if expected_count:
             logger.info(f"MikroTik: Expected approximately {expected_count} interfaces")
         
-        # v4.8.6: Primary command is "ethernet print" not "print brief"
+        # v4.8.7: Commands optimized for CRS326
         commands = [
             "/interface ethernet print without-paging",
             "/interface print brief without-paging",
             "/interface print without-paging",
         ]
         
-        # v4.8.6: Use longer wait time for many interfaces
-        wait_time = self.timeouts.get('command_wait', 30.0)
+        # v4.8.7: Use longer wait time for CRS326 and large switches
+        wait_time = self.timeouts.get('command_wait', 45.0)
         
         for cmd in commands:
             logger.info(f"MikroTik: Trying {cmd}")
@@ -569,9 +583,6 @@ class BotLinkMaster:
                 if interfaces:
                     logger.info(f"MikroTik: First interface: {interfaces[0]['name']}")
                     logger.info(f"MikroTik: Last interface: {interfaces[-1]['name']}")
-                    
-                    # v4.8.6: For ethernet print, we might get fewer interfaces than total
-                    # because it excludes bridge/vlan/loopback - this is expected
                     return interfaces
         
         return []
@@ -579,9 +590,8 @@ class BotLinkMaster:
     def _get_mikrotik_interface_count(self) -> int:
         """Get expected interface count from MikroTik"""
         try:
-            # v4.8.6: Use ethernet count for more accurate estimate
             cmd = "/interface ethernet print count-only"
-            output = self.execute_command(cmd, wait_time=3.0)
+            output = self.execute_command(cmd, wait_time=5.0)
             
             if output:
                 lines = output.strip().split('\n')
@@ -777,8 +787,8 @@ class BotLinkMaster:
         result = None
         successful_cmd = None
         
-        # v4.8.6: Use command_wait timeout
-        wait_time = self.timeouts.get('command_wait', 5.0)
+        # v4.8.7: Use command_wait timeout
+        wait_time = self.timeouts.get('command_wait', 10.0)
         
         for cmd in unique_commands:
             logger.info(f"Trying optical: {cmd}")
@@ -856,15 +866,15 @@ class BotLinkMaster:
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("BotLinkMaster v4.8.6 - Network Device Connection Module")
+    print("BotLinkMaster v4.8.7 - Network Device Connection Module")
     print("=" * 60)
     print("\nSupported Vendors:")
     from vendor_commands import get_supported_vendors
     for i, v in enumerate(get_supported_vendors(), 1):
         print(f"  {i:2}. {v}")
-    print("\nv4.8.6 Improvements:")
-    print("  - MikroTik: /interface ethernet print without-paging")
-    print("  - MikroTik: Timeout 30s for many interfaces")
-    print("  - Huawei: Added transceiver brief command")
-    print("  - Huawei: Increased timeout for large switches")
+    print("\nv4.8.7 Fixes:")
+    print("  - MikroTik CRS326 SSH algorithm compatibility")
+    print("  - Extended timeouts for large switches")
+    print("  - Improved prompt detection")
+    print("  - Additional legacy SSH algorithms")
     print("\nNote: OLT support will be available in v5.0.0")

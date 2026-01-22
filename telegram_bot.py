@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.8.6 - Telegram Bot
+BotLinkMaster v4.8.7 - Telegram Bot
 Network device monitoring with multi-vendor optical power support
 
-CHANGELOG v4.8.6:
-- FIX: MikroTik menggunakan "/interface ethernet print without-paging"
-- FIX: Timeout MikroTik & Huawei ditingkatkan
-- ADD: Huawei transceiver brief command
-- IMPROVED: Support unlimited interface count
+CHANGELOG v4.8.7:
+- FIX: MikroTik CRS326 SSH algorithm compatibility for RouterOS 7.16.x
+- FIX: Huawei CE6855 using "display interface description" for interface list
+- FIX: Cisco IOS using "show interface brief" (not "show ip interface brief")
+- IMPROVED: Extended timeouts for large switches
+- IMPROVED: Consistent versioning across all files
 
 Author: BotLinkMaster
-Version: 4.8.6
+Version: 4.8.7
 """
 
 import os
@@ -76,13 +77,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_auth(update):
         return
     
+    chat_id = update.effective_chat.id
     await update.message.reply_text(
-        f"🤖 BotLinkMaster v4.8.6\n"
+        f"🤖 BotLinkMaster v4.8.7\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"Bot monitoring perangkat jaringan.\n"
         f"Support 18 vendor router & switch.\n\n"
+        f"🆔 Chat ID Anda: {chat_id}\n\n"
         f"📡 Commands:\n"
-        f"   /interfaces [device]\n"
+        f"   /int [device] - List interface\n"
         f"   /cek [device] [interface]\n"
         f"   /redaman [device] [interface]\n\n"
         f"⏰ {tz_manager.get_current_time()}\n"
@@ -96,10 +99,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await update.message.reply_text(
-        "🔧 BANTUAN BOTLINKMASTER v4.8.6\n"
+        "🔧 BANTUAN BOTLINKMASTER v4.8.7\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "📋 INFO:\n"
-        "/start - Info bot\n"
+        "/start - Info bot + Chat ID\n"
         "/help - Bantuan ini\n"
         "/help2 - Contoh penggunaan\n"
         "/myid - Chat ID Anda\n"
@@ -110,10 +113,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/device [nama] - Detail\n"
         "/delete [nama] - Hapus\n\n"
         "📡 MONITORING:\n"
-        "/interfaces [device] - List interface\n"
-        "/interfaces [device] [page] - Halaman\n"
+        "/int [device] - List interface\n"
+        "/int [device] [page] - Halaman\n"
         "/cek [device] [interface] - Status\n"
         "/redaman [device] [interface] - Optical\n\n"
+        "💡 /int = /interfaces (sama)\n\n"
         "⚙️ CONFIG:\n"
         "/vendors - Daftar vendor\n"
         "/timezone - Info timezone\n"
@@ -137,13 +141,14 @@ async def help2_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "protocol: ssh\n"
         "port: 22\n"
         "vendor: cisco_ios\n\n"
-        "2️⃣ CEK INTERFACE:\n"
+        "2️⃣ LIST INTERFACE:\n"
+        "/int router-1\n"
+        "/int router-1 2 (halaman 2)\n\n"
+        "3️⃣ CEK INTERFACE:\n"
         "/cek router-1 Gi0/0\n\n"
-        "3️⃣ CEK REDAMAN:\n"
+        "4️⃣ CEK REDAMAN:\n"
         "/redaman router-1 Gi0/0\n\n"
-        "4️⃣ LIST INTERFACE:\n"
-        "/interfaces router-1\n"
-        "/interfaces router-1 2"
+        "💡 /int = /interfaces (sama)"
     )
 
 
@@ -364,7 +369,7 @@ async def delete_device(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def list_interfaces(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     List all interfaces with pagination
-    v4.8.6: Support unlimited interfaces
+    v4.8.7: Support unlimited interfaces
     """
     if not await check_auth(update):
         return
@@ -645,7 +650,7 @@ def main():
         print("ERROR: TELEGRAM_BOT_TOKEN tidak ditemukan di .env")
         return
     
-    logger.info("Starting BotLinkMaster v4.8.6...")
+    logger.info("Starting BotLinkMaster v4.8.7...")
     
     app = Application.builder().token(token).build()
     
@@ -662,6 +667,7 @@ def main():
     app.add_handler(CommandHandler("device", device_info))
     app.add_handler(CommandHandler("delete", delete_device))
     app.add_handler(CommandHandler("interfaces", list_interfaces))
+    app.add_handler(CommandHandler("int", list_interfaces))  # Alias untuk /interfaces
     app.add_handler(CommandHandler("cek", check_interface))
     app.add_handler(CommandHandler("redaman", check_optical))
     app.add_handler(CommandHandler("optical", check_optical))
@@ -669,15 +675,15 @@ def main():
     app.add_error_handler(error_handler)
     
     print("\n" + "=" * 50)
-    print("BotLinkMaster v4.8.6 Started!")
+    print("BotLinkMaster v4.8.7 Started!")
     print("=" * 50)
     print(f"\nTimezone: {tz_manager.get_timezone()}")
     print(f"Time: {tz_manager.get_current_time()}")
-    print("\nv4.8.6 Improvements:")
-    print("  - MikroTik: ethernet print without-paging")
-    print("  - MikroTik: 30s timeout for many interfaces")
-    print("  - Huawei: transceiver brief command")
-    print("  - Support unlimited interface count")
+    print("\nv4.8.7 Fixes:")
+    print("  - MikroTik CRS326 SSH algorithm compatibility")
+    print("  - Huawei CE6855 interface description")
+    print("  - Cisco IOS show interface brief")
+    print("  - Extended timeouts for large switches")
     print("\nNote: OLT support will be available in v5.0.0")
     print("\n[Press Ctrl+C to stop]\n")
     

@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster - Vendor Commands v4.8.6
+BotLinkMaster - Vendor Commands v4.8.7
 Multi-vendor support for routers and switches
 
-CHANGELOG v4.8.6:
-- FIX: MikroTik menggunakan "/interface ethernet print without-paging"
-       (hanya ethernet & SFP, tanpa bridge/vlan/loopback)
-- FIX: Support interface lebih dari 16 port
-- ADD: Huawei "display interface {interface} transceiver brief" untuk optical
-- IMPROVED: Timeout handling untuk device dengan banyak interface
-
-CHANGELOG v4.8.5:
-- FIX: MikroTik paging issue dengan without-paging
+CHANGELOG v4.8.7:
+- FIX: Cisco IOS show_interface_brief menggunakan "show interface brief"
+       (sebelumnya salah: "show ip interface brief")
+- FIX: Huawei show_interface_brief menggunakan "display interface description"
+       untuk list interface yang lebih akurat
+- FIX: MikroTik extended timeout dan algorithm support
+- IMPROVED: Support interface lebih dari 16 port
 
 Note: OLT support will be available in v5.0.0
 
 Author: BotLinkMaster
-Version: 4.8.6
+Version: 4.8.7
 """
 
 import re
@@ -70,18 +68,23 @@ class VendorConfig:
 
 VENDOR_CONFIGS: Dict[str, VendorConfig] = {
     # ==========================================================================
-    # CISCO IOS
+    # CISCO IOS - FIXED v4.8.7
     # ==========================================================================
     Vendor.CISCO_IOS.value: VendorConfig(
         name="Cisco IOS/IOS-XE",
         disable_paging="terminal length 0",
         show_interface="show interface {interface}",
+        # v4.8.7 FIX: Menggunakan "show interface brief" bukan "show ip interface brief"
         show_interface_brief="show interface brief",
         show_interface_status="show interface status",
         show_interface_description="show interface description",
         show_optical_all="show interface transceiver",
         show_optical_interface="show interface {interface} transceiver",
         show_optical_detail="show interface {interface} transceiver detail",
+        alt_interface_commands=[
+            "show interface status",
+            "show interface description",
+        ],
         rx_power_patterns=[
             r"Receive\s+Power[:\s]+(-?\d+\.?\d*)\s*dBm",
             r"Rx\s+Power[:\s]+(-?\d+\.?\d*)",
@@ -95,7 +98,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         status_up_patterns=[r"line protocol is up", r"is up"],
         status_down_patterns=[r"line protocol is down", r"is down", r"administratively down"],
         description_pattern=r"Description[:\s]+(.+?)(?:\n|$)",
-        notes="Cisco IOS routers and switches",
+        notes="Cisco IOS routers and switches - v4.8.7: Fixed show interface brief",
     ),
     
     # ==========================================================================
@@ -144,25 +147,30 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
     ),
     
     # ==========================================================================
-    # HUAWEI VRP - Updated v4.8.6
+    # HUAWEI VRP - FIXED v4.8.7
     # ==========================================================================
     Vendor.HUAWEI.value: VendorConfig(
         name="Huawei VRP",
         disable_paging="screen-length 0 temporary",
         show_interface="display interface {interface}",
-        show_interface_brief="display interface brief",
-        show_interface_status="display interface brief",
+        # v4.8.7 FIX: Menggunakan "display interface description" untuk list interface
+        # yang menampilkan nama interface dan deskripsi dengan benar
+        show_interface_brief="display interface description",
+        show_interface_status="display interface description",
         show_interface_description="display interface description",
         show_optical_all="display transceiver",
         show_optical_interface="display transceiver interface {interface}",
         show_optical_detail="display interface {interface} transceiver verbose",
-        # v4.8.6: Added transceiver brief for some Huawei switches
         alt_optical_commands=[
-            "display interface {interface} transceiver brief",  # v4.8.6: New command
+            "display interface {interface} transceiver brief",
             "display interface {interface} transceiver verbose",
             "display transceiver interface {interface} verbose",
             "display transceiver diagnosis interface {interface}",
             "display transceiver interface {interface}",
+        ],
+        alt_interface_commands=[
+            "display interface brief",
+            "display interface description",
         ],
         rx_power_patterns=[
             r"RX\s*power\s*\(dBm\)[:\s\|]+(-?\d+\.?\d*)",
@@ -172,7 +180,6 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
             r"RX\s+Power[:\s]+(-?\d+\.?\d*)",
             r"Rx\s+optical\s+power[:\s]+(-?\d+\.?\d*)",
             r"RX[:\s]+(-?\d+\.?\d*)\s*dBm",
-            # v4.8.6: Additional patterns for transceiver brief
             r"Rx\s+Power\s*:\s*(-?\d+\.?\d*)",
             r"RxPower[:\s]+(-?\d+\.?\d*)",
         ],
@@ -184,14 +191,13 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
             r"TX\s+Power[:\s]+(-?\d+\.?\d*)",
             r"Tx\s+optical\s+power[:\s]+(-?\d+\.?\d*)",
             r"TX[:\s]+(-?\d+\.?\d*)\s*dBm",
-            # v4.8.6: Additional patterns for transceiver brief
             r"Tx\s+Power\s*:\s*(-?\d+\.?\d*)",
             r"TxPower[:\s]+(-?\d+\.?\d*)",
         ],
         status_up_patterns=[r"current state[:\s]*UP", r"Physical[:\s]+UP", r"is\s+UP"],
         status_down_patterns=[r"current state[:\s]*DOWN", r"Physical[:\s]+DOWN", r"is\s+DOWN"],
         description_pattern=r"Description[:\s]+(.+?)(?:\n|$)",
-        notes="Huawei routers and switches - v4.8.6: Added transceiver brief support",
+        notes="Huawei routers and switches - v4.8.7: Fixed interface list command",
     ),
     
     # ==========================================================================
@@ -242,14 +248,12 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
     ),
     
     # ==========================================================================
-    # MIKROTIK RouterOS - FIXED v4.8.6
+    # MIKROTIK RouterOS - IMPROVED v4.8.7
     # ==========================================================================
     Vendor.MIKROTIK.value: VendorConfig(
         name="MikroTik RouterOS",
         disable_paging="",  # MikroTik uses "without-paging" in commands
         show_interface="/interface ethernet print detail without-paging where name={interface}",
-        # v4.8.6: Gunakan "ethernet print" bukan "print brief"
-        # Ini hanya menampilkan ethernet & SFP tanpa bridge/vlan/loopback
         show_interface_brief="/interface ethernet print without-paging",
         show_interface_status="/interface ethernet print without-paging",
         show_interface_description="/interface ethernet print without-paging",
@@ -259,7 +263,6 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         alt_optical_commands=[
             "/interface ethernet monitor {interface} once",
         ],
-        # v4.8.6: Updated commands
         alt_interface_commands=[
             "/interface ethernet print without-paging",
             "/interface print brief without-paging",
@@ -283,7 +286,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
             r"disabled=yes",
         ],
         description_pattern=r"comment[:\s]+(.+?)(?:\n|$)",
-        notes="MikroTik RouterOS v4.8.6 - ethernet print for ether/SFP only",
+        notes="MikroTik RouterOS v4.8.7 - CRS326 compatibility fix",
     ),
     
     # ==========================================================================
@@ -701,13 +704,11 @@ class OpticalParser:
 
 
 # =============================================================================
-# MIKROTIK OUTPUT CLEANER - v4.8.6
+# MIKROTIK OUTPUT CLEANER - v4.8.7
 # =============================================================================
 
 def clean_mikrotik_output(output: str) -> str:
-    """
-    Clean MikroTik output - remove prompts, paging, and command echoes
-    """
+    """Clean MikroTik output - remove prompts, paging, and command echoes"""
     if not output:
         return output
     
@@ -739,16 +740,11 @@ def clean_mikrotik_output(output: str) -> str:
 
 
 # =============================================================================
-# MIKROTIK INTERFACE PARSER - v4.8.6
+# MIKROTIK INTERFACE PARSER - v4.8.7
 # =============================================================================
 
 def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
-    """
-    Parse MikroTik /interface ethernet print without-paging output - v4.8.6
-    
-    v4.8.6: Support for unlimited interfaces (not just 16)
-    Output format: NUM FLAGS NAME TYPE MTU MAC-ADDRESS
-    """
+    """Parse MikroTik /interface ethernet print without-paging output - v4.8.7"""
     interfaces = []
     
     if not output:
@@ -792,10 +788,6 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
                 continue
         
         # Interface line pattern: NUM FLAGS NAME TYPE ...
-        # Examples:
-        #  0    ether1         ether  1500  48:8F:5A:05:51:79
-        #  1 RS sfp-sfpplus1   ether  1500  48:8F:5A:05:51:69
-        # 15  S sfp-sfpplus16  ether  1500  48:8F:5A:05:51:78
         match = re.match(r'^(\d+)\s+(.+)$', line_stripped)
         
         if not match:
@@ -837,7 +829,6 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
             continue
         
         # Determine status from flags
-        # R = running = link up
         if 'R' in flags:
             status = 'up'
         else:

@@ -1,14 +1,16 @@
 #!/bin/bash
 #
-# BotLinkMaster v4.6.0- Installation Script
+# BotLinkMaster v4.8.7 - Installation Script
 # 
 # Usage: chmod +x install.sh && ./install.sh
 #
 
 set -e
 
+VERSION="4.8.7"
+
 echo "=============================================="
-echo "BotLinkMaster v4.5.2- Installation Script"
+echo "BotLinkMaster v${VERSION} - Installation Script"
 echo "=============================================="
 echo ""
 
@@ -16,6 +18,7 @@ echo ""
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Check if running as root
@@ -120,7 +123,7 @@ else
         echo -e "${GREEN}✓ Created .env from .env.example${NC}"
     else
         cat > .env << 'EOF'
-# BotLinkMaster v4.5.2Configuration
+# BotLinkMaster v4.8.7 Configuration
 
 # Telegram Bot Token from @BotFather (REQUIRED)
 TELEGRAM_BOT_TOKEN=
@@ -146,7 +149,7 @@ SERVICE_FILE="/etc/systemd/system/botlinkmaster.service"
 
 # Create service content
 SERVICE_CONTENT="[Unit]
-Description=BotLinkMaster v4.5.2- Network Device Monitoring Bot
+Description=BotLinkMaster v${VERSION} - Network Device Monitoring Bot
 After=network.target
 
 [Service]
@@ -169,6 +172,7 @@ echo -e "${GREEN}✓ Systemd service created${NC}"
 echo ""
 echo -e "${YELLOW}[7/7] Setting file permissions...${NC}"
 chmod 755 *.py 2>/dev/null || true
+chmod 755 *.sh 2>/dev/null || true
 chmod 600 .env 2>/dev/null || true
 echo -e "${GREEN}✓ Permissions set${NC}"
 
@@ -176,6 +180,7 @@ echo -e "${GREEN}✓ Permissions set${NC}"
 echo ""
 echo "=============================================="
 echo -e "${GREEN}Installation Complete!${NC}"
+echo -e "${BLUE}BotLinkMaster v${VERSION}${NC}"
 echo "=============================================="
 echo ""
 echo -e "${YELLOW}NEXT STEPS:${NC}"

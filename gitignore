@@ -1,0 +1,48 @@
+# BotLinkMaster .gitignore
+
+# User configuration (contains sensitive data)
+.env
+
+# Database
+*.db
+botlinkmaster.db
+
+# Logs
+*.log
+botlinkmaster.log
+
+# Timezone config (user specific)
+timezone.conf
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyc
+
+# Virtual environment
+venv/
+env/
+.venv/
+.env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup directories (created by update.sh)
+backup_*/
+
+# Temporary files
+*.tmp
+*.temp
+*.new

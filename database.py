@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.5.2- Database Module
+BotLinkMaster v4.8.7 - Database Module
 SQLite database with support for multiple devices per IP (port forwarding)
 
 Author: BotLinkMaster
-Version: 4.5
+Version: 4.8.7
 """
 
 import sqlite3
@@ -65,8 +65,6 @@ class DatabaseManager:
     def _create_tables(self):
         cursor = self.conn.cursor()
         
-        # Devices table - name is UNIQUE, but host is NOT unique
-        # This allows multiple devices with same IP but different ports
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS devices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,7 +82,6 @@ class DatabaseManager:
             )
         ''')
         
-        # Interface cache table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS interface_cache (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -100,7 +97,6 @@ class DatabaseManager:
             )
         ''')
         
-        # Settings table for timezone etc
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
@@ -109,7 +105,6 @@ class DatabaseManager:
             )
         ''')
         
-        # Allowed users table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS allowed_users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -125,7 +120,6 @@ class DatabaseManager:
     def _migrate_tables(self):
         cursor = self.conn.cursor()
         
-        # Check devices table columns
         cursor.execute("PRAGMA table_info(devices)")
         columns = [col[1] for col in cursor.fetchall()]
         
@@ -136,7 +130,6 @@ class DatabaseManager:
             except:
                 pass
         
-        # Check interface_cache columns
         cursor.execute("PRAGMA table_info(interface_cache)")
         columns = [col[1] for col in cursor.fetchall()]
         
@@ -274,7 +267,6 @@ class DatabaseManager:
             logger.error(f"Error getting interfaces: {e}")
             return []
     
-    # Settings management
     def get_setting(self, key: str, default: str = '') -> str:
         try:
             cursor = self.conn.cursor()
@@ -296,7 +288,6 @@ class DatabaseManager:
         except:
             return False
     
-    # Allowed users management
     def add_allowed_user(self, chat_id: int, username: str = None, is_admin: bool = False) -> bool:
         try:
             cursor = self.conn.cursor()

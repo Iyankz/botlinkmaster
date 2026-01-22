@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster - Timezone Configuration
+BotLinkMaster v4.8.7 - Timezone Configuration
 IANA Timezone support with examples from each continent
 
 Author: BotLinkMaster
-Version: 4.5
+Version: 4.8.7
 """
 
 from datetime import datetime
@@ -110,7 +110,7 @@ def validate_timezone(timezone_str: str) -> bool:
 
 
 def get_timezone_examples_text() -> str:
-    text = "TIMEZONE IANA EXAMPLES:\n\n"
+    text = "🌍 TIMEZONE IANA EXAMPLES:\n\n"
     for continent, zones in TIMEZONE_EXAMPLES.items():
         text += f"[{continent}]\n"
         for tz, desc in zones[:4]:
@@ -125,8 +125,8 @@ def get_timezone_examples_text() -> str:
 def get_timezone_by_continent(continent: str) -> str:
     key = continent.capitalize()
     if key not in TIMEZONE_EXAMPLES:
-        return f"Continent '{continent}' not found.\nAvailable: Asia, Europe, America, Australia, Africa, Pacific"
-    text = f"TIMEZONE {key.upper()}:\n\n"
+        return f"❌ Continent '{continent}' not found.\nAvailable: Asia, Europe, America, Australia, Africa, Pacific"
+    text = f"🌍 TIMEZONE {key.upper()}:\n\n"
     for tz, desc in TIMEZONE_EXAMPLES[key]:
         text += f"{tz}\n  {desc}\n\n"
     return text

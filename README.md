@@ -1,12 +1,12 @@
-# BotLinkMaster v4.7.0
+# BotLinkMaster v4.8.7
 
 Bot Telegram untuk monitoring perangkat jaringan (router dan switch) dengan dukungan multi-vendor dan optical power monitoring.
 
+![Version](https://img.shields.io/badge/Version-4.8.7-blue?style=for-the-badge)
 ![Release](https://img.shields.io/github/v/release/Iyankz/botlinkmaster?style=for-the-badge)
 ![Release Date](https://img.shields.io/github/release-date/Iyankz/botlinkmaster?style=for-the-badge)
 ![Last Commit](https://img.shields.io/github/last-commit/Iyankz/botlinkmaster?style=for-the-badge)
 ![Stability](https://img.shields.io/badge/Release-Stable-success?style=for-the-badge)
-![Non Breaking](https://img.shields.io/badge/API-Non--Breaking-success?style=for-the-badge)
 ![NOC Ready](https://img.shields.io/badge/NOC-Ready-critical?style=for-the-badge)
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue?style=for-the-badge&logo=python)
 ![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04%2B-orange?style=for-the-badge&logo=ubuntu)
@@ -25,20 +25,24 @@ Bot Telegram untuk monitoring perangkat jaringan (router dan switch) dengan duku
 - ✅ **Timezone IANA** - Konfigurasi timezone dengan format standar
 - ✅ **Interface Monitoring** - Cek status UP/DOWN dan deskripsi
 - ✅ **Port Forwarding** - Satu IP bisa untuk multiple device
+- ✅ **Auto Update** - Version checking, auto backup, dan rollback support
 
 > 📌 **Note:** OLT support akan tersedia di v5.x.x
 
+---
+
 ## 📋 Requirements
 
-- **OS:** Ubuntu 22.04 LTS 
+- **OS:** Ubuntu 22.04 LTS atau Debian 11+
 - **RAM:** Minimum 1GB (2GB recommended)
 - **Storage:** Minimum 2GB free space
 - **Network:** Akses internet untuk Telegram API dan Akses ke Perangkat
 - **Access:** Root/sudo privileges
-- **Python** Versi 3.8+
+- **Python:** Versi 3.8+
 - **pip3**
 - **git** (opsional, untuk clone)
 
+---
 
 ## Instalasi
 
@@ -90,6 +94,8 @@ nano .env
 python telegram_bot.py
 ```
 
+---
+
 ## Konfigurasi .env
 
 ```env
@@ -103,6 +109,86 @@ ALLOWED_CHAT_IDS=216481118,-1001234567890
 # Timezone (default: Asia/Jakarta)
 TIMEZONE=Asia/Jakarta
 ```
+
+---
+
+## Update dari Versi Sebelumnya
+
+### Metode 1: Auto Update (Recommended)
+
+```bash
+cd ~/botlinkmaster
+chmod +x update.sh
+./update.sh
+```
+
+Script akan otomatis:
+- ✅ Cek versi lokal vs remote (via file `VERSION`)
+- ✅ Backup semua file sebelum update
+- ✅ Download file terbaru dari GitHub
+- ✅ Preserve database dan konfigurasi
+- ✅ Restart service
+
+### Opsi Update Script
+
+```bash
+# Cek update saja (tanpa install)
+./update.sh --check
+
+# Force update tanpa cek versi
+./update.sh --force
+
+# Rollback ke backup terakhir
+./update.sh --rollback
+
+# Rollback ke backup spesifik
+./update.sh --rollback backup_20250122_123456
+
+# Bantuan
+./update.sh --help
+```
+
+### Metode 2: Manual Update
+
+**Dari v4.5.x / v4.6.x / v4.7.x / v4.8.x ke v4.8.7:**
+
+```bash
+cd ~/botlinkmaster
+
+# 1. Stop service
+sudo systemctl stop botlinkmaster
+
+# 2. Backup
+cp botlinkmaster.db botlinkmaster.db.bak
+cp .env .env.bak
+
+# 3. Update files
+wget -O telegram_bot.py https://raw.githubusercontent.com/YOUR_USERNAME/botlinkmaster/main/telegram_bot.py
+wget -O botlinkmaster.py https://raw.githubusercontent.com/YOUR_USERNAME/botlinkmaster/main/botlinkmaster.py
+wget -O database.py https://raw.githubusercontent.com/YOUR_USERNAME/botlinkmaster/main/database.py
+wget -O vendor_commands.py https://raw.githubusercontent.com/YOUR_USERNAME/botlinkmaster/main/vendor_commands.py
+wget -O timezone_config.py https://raw.githubusercontent.com/YOUR_USERNAME/botlinkmaster/main/timezone_config.py
+
+# 4. Restart
+sudo systemctl restart botlinkmaster
+sudo systemctl status botlinkmaster
+```
+
+### File yang DIUPDATE vs DIPERTAHANKAN
+
+| Update (Replace) | Preserve (Jangan Replace) |
+|------------------|---------------------------|
+| telegram_bot.py | botlinkmaster.db |
+| botlinkmaster.py | .env |
+| vendor_commands.py | timezone.conf |
+| database.py | botlinkmaster.log |
+| timezone_config.py | |
+| update.sh | |
+| install.sh | |
+| README.md | |
+| CHANGELOG.md | |
+| VERSION | |
+
 ---
 
 ## Multiple Chat ID & Group
@@ -123,28 +209,29 @@ ALLOWED_CHAT_IDS=216481118,-1001234567890,-1009876543210
 ### Cara Mendapatkan Chat ID
 
 **Untuk User:**
-
 1. Kirim `/myid` ke bot setelah bot berjalan, atau
 2. Kirim pesan ke `@userinfobot`
 
 **Untuk Group:**
-
 1. Tambahkan bot ke group
-2. kirim `/start`di group
+2. Kirim `/start` di group
 3. Kirim `/myid` di group
 4. Group ID akan ditampilkan (angka negatif)
 
 ---
+
 ## Perintah Bot
 
 ### Info & Bantuan
 | Command | Deskripsi |
 |---------|-----------|
-| `/start` | Info bot |
+| `/start` | Info bot + Chat ID Anda |
 | `/help` | Bantuan lengkap |
 | `/help2` | Contoh penggunaan |
-| `/myid` | Chat ID Anda |
+| `/myid` | Chat ID lengkap |
 | `/time` | Waktu saat ini |
+
+> 💡 **Tip:** Chat ID langsung muncul saat `/start`, tidak perlu `/myid` lagi
 
 ### Device Management
 | Command | Deskripsi |
@@ -157,10 +244,12 @@ ALLOWED_CHAT_IDS=216481118,-1001234567890,-1009876543210
 ### Monitoring
 | Command | Deskripsi |
 |---------|-----------|
-| `/interfaces [device]` | List semua interface |
-| `/interfaces [device] [page]` | Interface dengan pagination |
+| `/int [device]` | List semua interface |
+| `/int [device] [page]` | Interface dengan pagination |
 | `/cek [device] [interface]` | Cek status interface |
 | `/redaman [device] [interface]` | Cek optical power |
+
+> 💡 **Alias:** `/int` = `/interfaces` (keduanya sama, /int lebih singkat)
 
 ### Konfigurasi
 | Command | Deskripsi |
@@ -168,6 +257,8 @@ ALLOWED_CHAT_IDS=216481118,-1001234567890,-1009876543210
 | `/vendors` | Daftar vendor |
 | `/timezone` | Info timezone |
 | `/settz [timezone]` | Set timezone |
+
+---
 
 ## Contoh Penggunaan
 
@@ -197,6 +288,7 @@ protocol: telnet
 port: 23
 vendor: huawei
 ```
+
 ### Tambah Perangkat dengan Port Forward
 
 ```
@@ -214,23 +306,30 @@ nama: router-cabang-2
 host: 10.0.0.1
 username: admin
 password: admin123
-protocol: telnet
+protocol: ssh
 port: 2202
 vendor: mikrotik
 ```
 
-### Cek Interface list
+### Cek Interface List
 ```
-/interfaces [device]
+/int router-1
+/int router-1 2
 ```
+
+> 💡 Bisa juga pakai `/interfaces router-1` (sama dengan /int)
+
 ### Cek Status Interface
 ```
-/cek [device] [interface]
+/cek router-1 Gi0/0
 ```
+
 ### Cek Optical Power
 ```
-/redaman [device] [interface]
+/redaman router-1 Gi0/0
 ```
+
+---
 
 ## Vendor yang Didukung
 
@@ -261,32 +360,18 @@ vendor: mikrotik
 
 Default timezone: `Asia/Jakarta`
 
-### Contoh Timezone per Benua
-
-**Asia:**
+### Contoh Timezone Indonesia
 
 - `Asia/Jakarta` - WIB (UTC+7)
 - `Asia/Makassar` - WITA (UTC+8)
 - `Asia/Jayapura` - WIT (UTC+9)
+
+### Contoh Timezone Lainnya
+
 - `Asia/Singapore` - Singapore (UTC+8)
 - `Asia/Tokyo` - Japan (UTC+9)
-
-**Europe:**
-
 - `Europe/London` - UK (UTC+0/+1)
-- `Europe/Paris` - France (UTC+1/+2)
-- `Europe/Berlin` - Germany (UTC+1/+2)
-
-**America:**
-
 - `America/New_York` - US Eastern (UTC-5/-4)
-- `America/Los_Angeles` - US Pacific (UTC-8/-7)
-- `America/Sao_Paulo` - Brazil (UTC-3)
-
-**Australia:**
-
-- `Australia/Sydney` - Sydney (UTC+10/+11)
-- `Australia/Perth` - Perth (UTC+8)
 
 ### Set Timezone via Bot
 
@@ -295,39 +380,66 @@ Default timezone: `Asia/Jakarta`
 ```
 
 Lihat daftar timezone:
-
 ```
 /timezone
 /timezone Asia
 /timezone Europe
 ```
 
+---
+
 ## Troubleshooting
 
-### Error: "no matching host key type found"
-Ini sudah di-fix di v4.6.0. Bot otomatis mencoba algoritma legacy untuk perangkat lama.
+### Service tidak jalan
 
-### MikroTik Interface Tidak Muncul
-Pastikan:
-1. Vendor diset ke `mikrotik`
-2. User memiliki akses ke `/interface print`
+```bash
+# Cek status
+sudo systemctl status botlinkmaster
 
-### Data Optical Tidak Muncul
-1. Pastikan interface memiliki SFP/transceiver
-2. Untuk MikroTik, gunakan nama interface yang benar (sesuai interface list)
+# Cek log
+sudo journalctl -u botlinkmaster -f
+
+# Restart
+sudo systemctl restart botlinkmaster
+```
+
+### MikroTik CRS326/CRS317 tidak merespons
+
+v4.8.7 sudah memperbaiki masalah ini:
+- Extended timeout untuk switch besar
+- Support algorithm legacy SSH
+- Improved prompt detection
+
+Jika masih bermasalah:
+1. Pastikan vendor diset ke `mikrotik`
+2. Pastikan user SSH memiliki akses penuh
+3. Cek RouterOS version (minimum v6.x)
+
+### Huawei CE6855 interface tidak lengkap
+
+v4.8.7 fix:
+- Menggunakan `display interface description` untuk list interface
+- Extended timeout untuk switch dengan banyak port
+
+### Cisco IOS interface brief error
+
+v4.8.7 fix:
+- Menggunakan `show interface brief` (bukan `show ip interface brief`)
 
 ### Error: Connection Timeout
 
 1. Pastikan IP dan port benar
 2. Cek firewall: `sudo ufw status`
 3. Pastikan SSH/Telnet aktif di perangkat
-4. Test manual: `ssh -p PORT user@host` atau `telnet host port`
+4. Test manual: `ssh -p PORT user@host`
 
 ### Error: Authentication Failed
 
 1. Cek username dan password
 2. Pastikan user memiliki akses SSH/Telnet
 3. Beberapa perangkat perlu enable password
+
+---
 
 ## Systemd Service
 
@@ -336,94 +448,59 @@ sudo systemctl start botlinkmaster    # Start
 sudo systemctl stop botlinkmaster     # Stop
 sudo systemctl restart botlinkmaster  # Restart
 sudo systemctl status botlinkmaster   # Status
-sudo journalctl -u botlinkmaster -f   # Log
+sudo systemctl enable botlinkmaster   # Auto-start on boot
+sudo journalctl -u botlinkmaster -f   # Live log
 ```
+
+---
 
 ## 📝 Changelog
 
-### v4.6.1 — Stabilitas MikroTik SSH
+### v4.8.7 — Bug Fixes & Compatibility
 **Release Type:** Bug Fix (Non-breaking)
 
 #### Fixed
-- Memperbaiki masalah **partial SSH output pada perangkat MikroTik**
-  (contoh: hanya sebagian interface yang terbaca).
-- Mekanisme pembacaan output SSH kini menggunakan **idle-time based read**
-  untuk memastikan seluruh data diterima sebelum parsing.
+- **MikroTik CRS326-24S+2Q+RM**: SSH algorithm compatibility untuk RouterOS 7.16.x
+- **MikroTik**: Extended timeout (30s → 60s) untuk switch dengan banyak interface
+- **Huawei CE6855**: Menggunakan `display interface description` untuk list interface yang lebih akurat
+- **Cisco IOS**: Perbaikan command `show interface brief` (sebelumnya salah: `show ip interface brief`)
 
 #### Improved
-- Stabilitas pengambilan data interface pada MikroTik dengan jumlah interface banyak.
-- Keandalan monitoring tanpa memerlukan konfigurasi tambahan di sisi perangkat.
+- Prompt detection untuk berbagai vendor
+- Hard timeout meningkat untuk perangkat dengan respons lambat
+- Konsistensi versi di semua file
 
 #### Notes
-- Tidak ada perubahan API.
-- Tidak memengaruhi vendor lain (Cisco, Huawei, Generic).
-- Aman untuk upgrade dari v4.6.1.
-  
-### v4.6.0 — Initial Stable Release
-**Release Type:** Stable
+- Tidak ada perubahan API
+- Aman untuk upgrade dari v4.5.x, v4.6.x, v4.7.x, v4.8.x
+- Database compatible dengan versi sebelumnya
+
+---
+
+### v4.8.6 — MikroTik & Huawei Improvements
+
+#### Fixed
+- MikroTik menggunakan `/interface ethernet print without-paging`
+- Support unlimited interface count
+- Huawei transceiver brief command
+
+---
+
+### v4.7.0 — Multi-Vendor Expansion
 
 #### Added
-- Dukungan multi-vendor (MikroTik, Cisco, Huawei, Generic).
-- Monitoring status interface (up/down).
-- Optical power monitoring (RX/TX).
-- Dukungan koneksi SSH dan Telnet.
-- Kompatibilitas dengan perangkat legacy.
+- Support 18 vendor
+- Optical power monitoring
+- Interface pagination
 
-#### Notes
-- Fokus pada kestabilan dan kebutuhan operasional NOC.
+---
 
-## Update dari Versi Sebelumnya
+### v4.6.0 — Initial Stable Release
 
-### Step 1: Backup
-
-```bash
-cd ~/botlinkmaster
-
-# Backup database
-cp botlinkmaster.db botlinkmaster.db.bak
-
-# Backup config
-cp .env .env.bak
-```
-
-### Step 2: Stop Service
-
-```bash
-sudo systemctl stop botlinkmaster
-```
-
-### Step 3: Replace File
-
-Replace file-file berikut:
-
-- `telegram_bot.py`
-```bash
-cd ~/botlinkmaster
-wget -O telegram_bot.py https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/telegram_bot.py
-```
-- `botlinkmaster.py`
-```bash
-cd ~/botlinkmaster
-wget -O botlinkmaster.py https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/botlinkmaster.py
-```
-- `database.py`
-```bash
-cd ~/botlinkmaster
-wget -O database.py https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/database.py
-```
-- `vendor_commands.py`
-```bash
-cd ~/botlinkmaster
-wget -O vendor_commands.py https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/vendor_commands.py
-```
-
-### Step 4: Restart Service
-
-```bash
-sudo systemctl restart botlinkmaster
-```
-
-Database akan otomatis migrasi ke schema baru.
+#### Added
+- Multi-vendor support
+- SSH dan Telnet support
+- Legacy device compatibility
 
 ---
 
@@ -431,13 +508,18 @@ Database akan otomatis migrasi ke schema baru.
 
 ### File Locations
 
-| File | Path |
-|------|------|
-| Bot files | `~/botlinkmaster/` |
-| Database | `~/botlinkmaster/botlinkmaster.db` |
-| Config | `~/botlinkmaster/.env` |
-| Log | `~/botlinkmaster/botlinkmaster.log` |
-| Service | `/etc/systemd/system/botlinkmaster.service` |
+| File | Path | Keterangan |
+|------|------|------------|
+| Bot files | `~/botlinkmaster/` | Semua file bot |
+| Database | `~/botlinkmaster/botlinkmaster.db` | SQLite database |
+| Config | `~/botlinkmaster/.env` | Konfigurasi (token, chat id) |
+| Log | `~/botlinkmaster/botlinkmaster.log` | Log file |
+| Version | `~/botlinkmaster/VERSION` | File versi untuk update |
+| Changelog | `~/botlinkmaster/CHANGELOG.md` | History perubahan |
+| Service | `/etc/systemd/system/botlinkmaster.service` | Systemd service |
+| Backup | `~/botlinkmaster/backup_*/` | Backup dari update.sh |
+
+---
 
 ## Kontribusi
 
@@ -455,4 +537,4 @@ Proyek ini dilisensikan di bawah **MIT License** - lihat file [LICENSE](LICENSE)
 
 ## Dukung Proyek Ini
 
-Jika repositori ini membantu memudahkan pekerjaan Anda atau bermanfaat bagi tim IT Anda, mohon berikan bintang (Star) ⭐ pada repositori ini sebagai bentuk dukungan bagi kami untuk terus mengembangkan script ini.
+Jika repositori ini membantu memudahkan pekerjaan Anda, mohon berikan bintang (Star) ⭐ pada repositori ini.

@@ -1,4 +1,4 @@
-# BotLinkMaster v4.5.2- Python Dependencies
+# BotLinkMaster v4.8.7 - Python Dependencies
 
 # Telegram Bot API
 python-telegram-bot>=20.0
