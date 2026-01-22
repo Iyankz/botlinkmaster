@@ -479,7 +479,7 @@ Pull request dan issue welcome di GitHub repository.
 
 **Catatan:** Untuk bantuan lebih lanjut, gunakan `/help` dan `/help2` di bot.
 
-## Dibuat dengan ❤️ oleh [Iyankz](https://github.com/Iyankz)
+## Dibuat dengan ❤️ oleh [Iyankz](https://Iyankz.github.io)
 
 ## Lisensi
 
