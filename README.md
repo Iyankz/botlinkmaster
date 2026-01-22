@@ -33,14 +33,41 @@ Bot Telegram untuk monitoring perangkat jaringan (router dan switch) dengan duku
 
 ## 📋 Requirements
 
-- **OS:** Ubuntu 22.04 LTS atau Debian 11+
-- **RAM:** Minimum 1GB (2GB recommended)
-- **Storage:** Minimum 2GB free space
-- **Network:** Akses internet untuk Telegram API dan Akses ke Perangkat
-- **Access:** Root/sudo privileges
-- **Python:** Versi 3.8+
-- **pip3**
-- **git** (opsional, untuk clone)
+### Operating System
+
+| OS | Version | Status |
+|----|---------|--------|
+| Ubuntu | 22.04 LTS | ✅ Supported |
+| Ubuntu | 24.04 LTS | ✅ Supported |
+| Debian | 12 (Bookworm) | ✅ Supported |
+| Debian | 13 (Trixie) | ✅ Supported |
+
+### Hardware
+
+| Komponen | Minimal | Recommended |
+|----------|---------|-------------|
+| CPU | 1 Core | 2 Core |
+| RAM | 512 MB | 1 GB |
+| Storage | 1 GB | 2 GB |
+| Network | 1 Mbps | 10 Mbps |
+
+### Software Dependencies
+
+| Software | Version | Keterangan |
+|----------|---------|------------|
+| Python | 3.8+ | Required |
+| pip3 | Latest | Required |
+| git | Latest | Optional (untuk clone) |
+
+### Network Requirements
+
+| Akses | Port | Keterangan |
+|-------|------|------------|
+| Telegram API | 443 (HTTPS) | Outbound ke api.telegram.org |
+| SSH ke Device | 22 (default) | Ke perangkat jaringan |
+| Telnet ke Device | 23 (default) | Ke perangkat jaringan |
+
+> 💡 **Note:** Port SSH/Telnet bisa custom sesuai konfigurasi port forwarding
 
 ---
 
@@ -163,11 +190,11 @@ cp botlinkmaster.db botlinkmaster.db.bak
 cp .env .env.bak
 
 # 3. Update files
-wget -O telegram_bot.py https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/telegram_bot.py
-wget -O botlinkmaster.py https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/botlinkmaster.py
-wget -O database.py https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/database.py
-wget -O vendor_commands.py https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/vendor_commands.py
-wget -O timezone_config.py https://raw.githubusercontent.com/Iyankz/botlinkmaster/main/timezone_config.py
+wget -O telegram_bot.py https://raw.githubusercontent.com/YOUR_USERNAME/botlinkmaster/main/telegram_bot.py
+wget -O botlinkmaster.py https://raw.githubusercontent.com/YOUR_USERNAME/botlinkmaster/main/botlinkmaster.py
+wget -O database.py https://raw.githubusercontent.com/YOUR_USERNAME/botlinkmaster/main/database.py
+wget -O vendor_commands.py https://raw.githubusercontent.com/YOUR_USERNAME/botlinkmaster/main/vendor_commands.py
+wget -O timezone_config.py https://raw.githubusercontent.com/YOUR_USERNAME/botlinkmaster/main/timezone_config.py
 
 # 4. Restart
 sudo systemctl restart botlinkmaster
@@ -431,7 +458,7 @@ sudo journalctl -u botlinkmaster -f   # Live log
 
 ---
 
-## 📝 [Changelog](CHANGELOG.md)
+## 📝 Changelog
 
 ### v4.8.7 — Bug Fixes & Compatibility
 **Release Type:** Bug Fix (Non-breaking)
@@ -439,6 +466,13 @@ sudo journalctl -u botlinkmaster -f   # Live log
 #### Fixed
 - **MikroTik**: SSH algorithm compatibility untuk RouterOS 7.16.x
 - **MikroTik**: Extended timeout (30s → 60s) untuk switch dengan banyak interface
+- **Huawei**: Menggunakan `display interface description` untuk list interface yang lebih akurat
+- **Cisco IOS**: Perbaikan command
+- **Telnet**: Perbaikan total koneksi
+  - FIX: Login detection yang salah kirim command sebagai username
+  - Proper login sequence (banner → login → password → prompt)
+  - Idle-based reading seperti SSH
+  - Support MikroTik, Cisco, Huawei, dll
 
 #### Improved
 - Prompt detection untuk berbagai vendor
