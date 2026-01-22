@@ -19,6 +19,11 @@ Format berdasarkan [Keep a Changelog](https://keepachangelog.com/id-ID/1.0.0/).
   - `idle_timeout`: 10s → 15s
 - **Huawei CE6855**: Menggunakan `display interface description` (sebelumnya `display interface brief`)
 - **Cisco IOS**: Menggunakan `show interface brief` (sebelumnya `show ip interface brief`)
+- **Telnet**: Perbaikan koneksi dan eksekusi command
+  - Multi-pattern login detection (support berbagai format prompt)
+  - Idle-based reading seperti SSH (tidak lagi hanya `read_very_eager`)
+  - Prompt detection untuk mendeteksi command selesai
+  - Better timeout handling
 - Improved prompt detection untuk semua vendor
 
 ### Added
@@ -27,6 +32,7 @@ Format berdasarkan [Keep a Changelog](https://keepachangelog.com/id-ID/1.0.0/).
 - `update.sh` dengan version checking dan rollback
 - `VERSION` file untuk tracking versi
 - `CHANGELOG.md` untuk dokumentasi perubahan
+- `_wait_for_prompt_telnet()` method untuk Telnet prompt detection
 
 ### Changed
 - `/start` sekarang menampilkan Chat ID langsung
