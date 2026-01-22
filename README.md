@@ -437,10 +437,8 @@ sudo journalctl -u botlinkmaster -f   # Live log
 **Release Type:** Bug Fix (Non-breaking)
 
 #### Fixed
-- **MikroTik CRS326-24S+2Q+RM**: SSH algorithm compatibility untuk RouterOS 7.16.x
+- **MikroTik**: SSH algorithm compatibility untuk RouterOS 7.16.x
 - **MikroTik**: Extended timeout (30s → 60s) untuk switch dengan banyak interface
-- **Huawei CE6855**: Menggunakan `display interface description` untuk list interface yang lebih akurat
-- **Cisco IOS**: Perbaikan command `show interface brief` (sebelumnya salah: `show ip interface brief`)
 
 #### Improved
 - Prompt detection untuk berbagai vendor
