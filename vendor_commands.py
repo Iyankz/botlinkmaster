@@ -261,6 +261,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         show_optical_interface="/interface ethernet monitor {interface} once",
         show_optical_detail="/interface ethernet monitor {interface} once",
         alt_optical_commands=[
+            "/interface ethernet monitor {interface}",
             "/interface ethernet monitor {interface} once",
         ],
         alt_interface_commands=[
