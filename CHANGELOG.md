@@ -10,21 +10,27 @@ Format berdasarkan [Keep a Changelog](https://keepachangelog.com/id-ID/1.0.0/).
 
 ### Fixed
 - **Cisco NX-OS**: Description terpotong jika mengandung spasi
-  - Masalah: "FS(OTB-B T1C1)" tampil sebagai "FS(OTB-B"
-  - Solusi: Ambil description dari `show running-config interface` (source of truth)
+  - Masalah: "xcon:OLT C300A 1/19/1" tampil sebagai "xcon:OLT"
+  - Solusi: `/int` sekarang mengambil description dari `show running-config | section interface`
+  - `/cek` mengambil dari `show running-config interface <iface>`
   - Status parsing tetap dari `show interface status` (tidak diubah)
 - **Huawei VRP/Quidway (Non-CloudEngine)**: Status interface UNKNOWN
   - Masalah: /cek dan /redaman menampilkan UNKNOWN padahal port UP
-  - Solusi: Tambah pattern "Physical state : Up/Down" dan "Line protocol current state"
-  - CloudEngine dan vendor lain tidak terpengaruh
+  - Solusi: Tambah pattern "current state : UP" dan "Line protocol current state"
+  - Pattern ditambahkan ke Huawei config DAN generic config sebagai fallback
+- **Generic vendor patterns**: Lebih inklusif untuk berbagai format vendor
+  - Sekarang juga mengenali format Huawei "current state : UP/DOWN"
+  - Device tanpa vendor tetap bisa dideteksi statusnya dengan benar
 
 ### Added
-- `_get_nxos_description_from_config()` - Method khusus NX-OS untuk ambil description
+- `_get_all_nxos_descriptions()` - Get all descriptions efficiently from running-config
+- `_get_nxos_description_from_config()` - Get single interface description
 
 ### Notes
 - Minimal changes, v4.8.7 baseline preserved
 - MikroTik, CloudEngine, dan vendor lain tidak terpengaruh
 - Database compatible dengan versi sebelumnya
+- **REKOMENDASI**: Selalu set vendor yang benar untuk hasil optimal
 
 ---
 
