@@ -4,10 +4,9 @@ BotLinkMaster v4.8.8 - Network Device Connection Module
 SSH/Telnet support for routers and switches
 
 CHANGELOG v4.8.8:
-- FIX: Cisco NX-OS description terpotong jika ada spasi
-- FIX: Huawei Non-CloudEngine (Quidway/S-Series) status UNKNOWN
-- FIX: Optical status tidak lagi tergantung interface status
-- IMPROVED: normalize_nxos_string() untuk membersihkan karakter non-printable
+- FIX: Cisco NX-OS description terpotong - now uses show running-config interface
+- FIX: Huawei VRP/Quidway status UNKNOWN - added VRP-specific patterns
+- NOTE: Minimal fixes only, v4.8.7 baseline preserved
 
 CHANGELOG v4.8.7:
 - FIX: MikroTik CRS326 SSH algorithm compatibility for RouterOS 7.16.x
@@ -919,13 +918,7 @@ class BotLinkMaster:
         }
     
     def _get_cisco_nxos_interface_status(self, interface_name: str) -> Dict[str, Any]:
-        """
-        Get Cisco NX-OS interface status - v4.8.8 FIXED
-        
-        v4.8.8 FIX: Description dengan spasi tidak lagi terpotong
-        """
-        from vendor_commands import normalize_description, normalize_nxos_string
-        
+        """Get Cisco NX-OS interface status"""
         result = {
             'name': interface_name,
             'full_name': interface_name,
@@ -938,104 +931,81 @@ class BotLinkMaster:
         result['raw_output'] = output
         
         if output:
-            # v4.8.8: Normalize output first
-            output = normalize_nxos_string(output)
-            
-            lines = output.split('\n')
-            header_positions = {}
-            
-            for line in lines:
-                original_line = line
+            for line in output.split('\n'):
                 line_lower = line.lower()
                 iface_lower = interface_name.lower()
                 
-                # Parse header to get column positions
-                if 'port' in line_lower and 'status' in line_lower:
-                    for col in ['Port', 'Name', 'Status', 'Vlan', 'Duplex', 'Speed', 'Type']:
-                        pos = line.find(col)
-                        if pos < 0:
-                            pos = line.lower().find(col.lower())
-                        if pos >= 0:
-                            header_positions[col] = pos
-                    continue
-                
-                # Check if this line contains our interface
-                if iface_lower not in line_lower and iface_lower.replace('/', '') not in line_lower:
-                    continue
-                
-                # v4.8.8: Use column positions to extract description properly
-                if header_positions and 'Name' in header_positions:
-                    name_start = header_positions.get('Name', 14)
-                    status_start = header_positions.get('Status', 32)
-                    
-                    # Extract description between Name and Status columns
-                    if len(original_line) > name_start:
-                        desc_end = min(status_start, len(original_line))
-                        result['description'] = normalize_description(original_line[name_start:desc_end].strip())
-                    
-                    # Extract status from Status column
-                    if len(original_line) > status_start:
-                        vlan_start = header_positions.get('Vlan', status_start + 12)
-                        status_text = original_line[status_start:vlan_start].strip().lower()
-                        
-                        if 'connected' in status_text and 'notconnect' not in status_text:
-                            result['status'] = 'up'
-                        elif 'notconnect' in status_text:
-                            result['status'] = 'down'
-                        elif 'disabled' in status_text:
-                            result['status'] = 'down'
-                        elif 'sfp' in status_text or 'xcvr' in status_text:
-                            result['status'] = 'down'
-                else:
-                    # Fallback: find status keyword position and extract description
-                    status_keywords = ['connected', 'notconnect', 'disabled', 'sfpabsent', 'xcvrnotse']
-                    status_pos = -1
-                    
-                    for kw in status_keywords:
-                        pos = line_lower.find(kw)
-                        if pos > 0:
-                            status_pos = pos
-                            break
-                    
+                if iface_lower in line_lower or iface_lower.replace('/', '') in line_lower:
                     parts = line.split()
-                    if len(parts) >= 2:
-                        # Find where interface name ends
-                        iface_end = line_lower.find(iface_lower) + len(iface_lower)
-                        if iface_end < 0:
-                            iface_end = len(parts[0])
+                    if len(parts) >= 3:
+                        # v4.8.7: Get description from parts[1] - may be truncated
+                        # v4.8.8: Will be overridden below from running-config
+                        if len(parts) >= 2 and parts[1] != '--':
+                            result['description'] = parts[1]
                         
-                        # Skip whitespace after interface name
-                        while iface_end < len(line) and line[iface_end] == ' ':
-                            iface_end += 1
+                        if 'connected' in line_lower and 'notconnect' not in line_lower:
+                            result['status'] = 'up'
+                        elif 'notconnect' in line_lower:
+                            result['status'] = 'down'
+                        elif 'disabled' in line_lower:
+                            result['status'] = 'down'
+                        elif 'sfp not' in line_lower or 'xcvr not' in line_lower:
+                            result['status'] = 'down'
                         
-                        # Description is between interface name and status
-                        if status_pos > iface_end:
-                            result['description'] = normalize_description(line[iface_end:status_pos].strip())
-                        elif len(parts) >= 2 and parts[1] != '--':
-                            result['description'] = normalize_description(parts[1])
-                    
-                    # Parse status
-                    if 'connected' in line_lower and 'notconnect' not in line_lower:
-                        result['status'] = 'up'
-                    elif 'notconnect' in line_lower:
-                        result['status'] = 'down'
-                    elif 'disabled' in line_lower:
-                        result['status'] = 'down'
-                    elif 'sfp not' in line_lower or 'xcvr not' in line_lower:
-                        result['status'] = 'down'
-                
-                if result['status'] != 'unknown':
-                    return result
+                        if result['status'] != 'unknown':
+                            break
         
-        cmd = f"show interface {interface_name}"
-        output2 = self.execute_command(cmd, wait_time=5.0)
+        # v4.8.8 FIX: Get description from running-config (source of truth)
+        # This overrides any truncated description from show interface status
+        desc_from_config = self._get_nxos_description_from_config(interface_name)
+        if desc_from_config:
+            result['description'] = desc_from_config
         
-        if output2:
-            result['raw_output'] = output2
-            result['status'] = self.optical_parser.parse_interface_status(output2)
-            result['description'] = normalize_description(self.optical_parser.parse_description(output2))
+        # Fallback to show interface for status if still unknown
+        if result['status'] == 'unknown':
+            cmd = f"show interface {interface_name}"
+            output2 = self.execute_command(cmd, wait_time=5.0)
+            
+            if output2:
+                result['raw_output'] = output2
+                result['status'] = self.optical_parser.parse_interface_status(output2)
+                # Only use description from here if we don't have one from config
+                if not result['description']:
+                    result['description'] = self.optical_parser.parse_description(output2)
         
         return result
+    
+    def _get_nxos_description_from_config(self, interface_name: str) -> str:
+        """
+        v4.8.8: Get NX-OS interface description from running-config
+        
+        This is the source of truth for description - avoids truncation issues
+        from show interface status table output.
+        
+        Returns:
+            Description string, or empty string if not found
+        """
+        try:
+            cmd = f"show running-config interface {interface_name}"
+            output = self.execute_command(cmd, wait_time=5.0)
+            
+            if not output:
+                return ''
+            
+            # Parse description line from running-config
+            # Format: "  description FS(OTB-B T1C1)"
+            for line in output.split('\n'):
+                line_stripped = line.strip()
+                if line_stripped.lower().startswith('description '):
+                    # Extract everything after "description "
+                    desc = line_stripped[12:].strip()
+                    logger.info(f"NX-OS: Got description from running-config: {desc}")
+                    return desc
+            
+            return ''
+        except Exception as e:
+            logger.warning(f"NX-OS: Failed to get description from running-config: {e}")
+            return ''
     
     def _get_mikrotik_interface_status(self, interface_name: str) -> Dict[str, Any]:
         """Get MikroTik interface status"""
@@ -1172,11 +1142,9 @@ if __name__ == "__main__":
     from vendor_commands import get_supported_vendors
     for i, v in enumerate(get_supported_vendors(), 1):
         print(f"  {i:2}. {v}")
-    print("\nv4.8.8 Fixes:")
-    print("  - Cisco NX-OS: Description dengan spasi tidak lagi terpotong")
-    print("  - Huawei Non-CloudEngine (Quidway/S-Series): Status UNKNOWN fixed")
-    print("  - Optical status tidak lagi tergantung interface status")
-    print("  - normalize_nxos_string() untuk karakter non-printable")
+    print("\nv4.8.8 Fixes (Minimal):")
+    print("  - Cisco NX-OS: Description from show running-config interface")
+    print("  - Huawei VRP/Quidway: Added status patterns for non-CloudEngine")
     print("\nv4.8.7 Fixes:")
     print("  - MikroTik CRS326 SSH algorithm compatibility")
     print("  - Telnet: Fixed login detection")

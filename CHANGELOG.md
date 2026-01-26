@@ -9,28 +9,22 @@ Format berdasarkan [Keep a Changelog](https://keepachangelog.com/id-ID/1.0.0/).
 ## [4.8.8] - 2025-01-26
 
 ### Fixed
-- **Cisco NX-OS**: Description dengan spasi tidak lagi terpotong
+- **Cisco NX-OS**: Description terpotong jika mengandung spasi
   - Masalah: "FS(OTB-B T1C1)" tampil sebagai "FS(OTB-B"
-  - Penyebab: Karakter non-printable/invisible dalam output NX-OS
-  - Solusi: `normalize_nxos_string()` untuk membersihkan karakter aneh
-  - Parsing berbasis posisi kolom, bukan split by whitespace
-- **Huawei Non-CloudEngine (Quidway/S-Series)**: Status interface UNKNOWN
+  - Solusi: Ambil description dari `show running-config interface` (source of truth)
+  - Status parsing tetap dari `show interface status` (tidak diubah)
+- **Huawei VRP/Quidway (Non-CloudEngine)**: Status interface UNKNOWN
   - Masalah: /cek dan /redaman menampilkan UNKNOWN padahal port UP
-  - Penyebab: Keyword status berbeda dari CloudEngine
-  - Solusi: Tambah pattern "Physical state", "Line protocol current state"
-- **Optical Status**: Tidak lagi tergantung interface status
-  - Jika RX/TX power valid, optical status tetap GOOD/EXCELLENT
-  - Walaupun interface status UNKNOWN
+  - Solusi: Tambah pattern "Physical state : Up/Down" dan "Line protocol current state"
+  - CloudEngine dan vendor lain tidak terpengaruh
 
 ### Added
-- `normalize_nxos_string()` - Normalisasi string NX-OS
-- `normalize_description()` - Normalisasi description interface
-- Pattern status untuk Huawei Non-CloudEngine/Quidway
+- `_get_nxos_description_from_config()` - Method khusus NX-OS untuk ambil description
 
-### Changed
-- `update.sh` sekarang mendukung update berbasis perubahan file (checksum)
-  - Hotfix tanpa version bump bisa langsung ter-pull
-  - Gunakan `--force` untuk update walaupun version sama
+### Notes
+- Minimal changes, v4.8.7 baseline preserved
+- MikroTik, CloudEngine, dan vendor lain tidak terpengaruh
+- Database compatible dengan versi sebelumnya
 
 ---
 

@@ -4,11 +4,10 @@ BotLinkMaster v4.8.8 - Telegram Bot
 Network device monitoring with multi-vendor optical power support
 
 CHANGELOG v4.8.8:
-- FIX: Cisco NX-OS description terpotong jika ada spasi
-- FIX: Huawei Non-CloudEngine (Quidway/S-Series) status UNKNOWN
-- FIX: Optical status tidak lagi tergantung interface status
+- FIX: Cisco NX-OS description from running-config (avoids truncation)
+- FIX: Huawei VRP/Quidway status patterns (non-CloudEngine)
 
-CHANGELOG v4.8.8:
+CHANGELOG v4.8.7:
 - FIX: MikroTik CRS326 SSH algorithm compatibility for RouterOS 7.16.x
 - FIX: Huawei CE6855 using "display interface description" for interface list
 - FIX: Cisco IOS using "show interface brief" (not "show ip interface brief")
@@ -683,10 +682,9 @@ def main():
     print("=" * 50)
     print(f"\nTimezone: {tz_manager.get_timezone()}")
     print(f"Time: {tz_manager.get_current_time()}")
-    print("\nv4.8.8 Fixes:")
-    print("  - Cisco NX-OS: Description dengan spasi tidak lagi terpotong")
-    print("  - Huawei Non-CloudEngine (Quidway/S-Series): Status UNKNOWN fixed")
-    print("  - Optical status independent dari interface status")
+    print("\nv4.8.8 Fixes (Minimal):")
+    print("  - Cisco NX-OS: Description from running-config")
+    print("  - Huawei VRP/Quidway: Non-CloudEngine status patterns")
     print("\nNote: OLT support will be available in v5.0.0")
     print("\n[Press Ctrl+C to stop]\n")
     

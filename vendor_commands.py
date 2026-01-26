@@ -4,14 +4,9 @@ BotLinkMaster - Vendor Commands v4.8.8
 Multi-vendor support for routers and switches
 
 CHANGELOG v4.8.8:
-- FIX: Cisco NX-OS description terpotong jika mengandung spasi
-       Masalah: "FS(OTB-B T1C1)" menjadi "FS(OTB-B"
-       Solusi: normalize_nxos_string() untuk membersihkan karakter non-printable
-- FIX: Huawei Non-CloudEngine (Quidway/S-Series) status UNKNOWN
-       Masalah: /cek dan /redaman menampilkan UNKNOWN padahal port UP
-       Solusi: Tambah pattern "Physical state" dan "Line protocol current state"
-- FIX: Optical status tidak lagi tergantung interface status
-       Jika RX/TX valid, optical status tetap GOOD/EXCELLENT walaupun link UNKNOWN
+- FIX: Huawei VRP/Quidway (non-CloudEngine) status UNKNOWN
+       Added patterns for "Physical state" and "Line protocol current state"
+       (Minimal fix - no refactoring)
 
 CHANGELOG v4.8.7:
 - FIX: Cisco IOS show_interface_brief menggunakan "show interface brief"
@@ -730,107 +725,6 @@ class OpticalParser:
 
 
 # =============================================================================
-# CISCO NX-OS STRING NORMALIZER - v4.8.8
-# =============================================================================
-
-def normalize_nxos_string(text: str) -> str:
-    """
-    Normalize Cisco NX-OS output string - v4.8.8
-    
-    Masalah: Description dengan spasi terpotong di display
-    Contoh: "FS(OTB-B T1C1)" tampil sebagai "FS(OTB-B"
-    
-    Root cause: NX-OS output mengandung karakter non-printable atau
-    whitespace special yang menyebabkan layer display menganggap string selesai.
-    
-    Solusi:
-    - Hapus karakter non-printable (control characters)
-    - Normalize whitespace (non-breaking space -> regular space)
-    - Strip karakter aneh di awal/akhir
-    """
-    if not text:
-        return text
-    
-    # Remove ANSI escape codes
-    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-    text = ansi_escape.sub('', text)
-    
-    # Replace non-breaking space (U+00A0) with regular space
-    text = text.replace('\u00a0', ' ')
-    
-    # Replace other special whitespace characters
-    special_spaces = [
-        '\u2000',  # En Quad
-        '\u2001',  # Em Quad
-        '\u2002',  # En Space
-        '\u2003',  # Em Space
-        '\u2004',  # Three-Per-Em Space
-        '\u2005',  # Four-Per-Em Space
-        '\u2006',  # Six-Per-Em Space
-        '\u2007',  # Figure Space
-        '\u2008',  # Punctuation Space
-        '\u2009',  # Thin Space
-        '\u200a',  # Hair Space
-        '\u200b',  # Zero Width Space
-        '\u202f',  # Narrow No-Break Space
-        '\u205f',  # Medium Mathematical Space
-        '\u3000',  # Ideographic Space
-    ]
-    for sp in special_spaces:
-        text = text.replace(sp, ' ')
-    
-    # Remove control characters (0x00-0x1F except tab, newline, carriage return)
-    # And DEL (0x7F) and other non-printable
-    cleaned = []
-    for char in text:
-        code = ord(char)
-        # Keep printable ASCII (0x20-0x7E), tab (0x09), newline (0x0A), CR (0x0D)
-        # And extended printable characters (0x80+)
-        if (0x20 <= code <= 0x7E) or code in (0x09, 0x0A, 0x0D) or code >= 0x80:
-            # But filter out problematic high characters
-            if code < 0x100 or (code >= 0x100 and not (0xFFF0 <= code <= 0xFFFF)):
-                cleaned.append(char)
-    
-    text = ''.join(cleaned)
-    
-    # Normalize multiple spaces to single space (but preserve structure)
-    text = re.sub(r'[ \t]{2,}', '  ', text)
-    
-    # Strip leading/trailing whitespace per line
-    lines = text.split('\n')
-    lines = [line.strip() for line in lines]
-    text = '\n'.join(lines)
-    
-    return text
-
-
-def normalize_description(desc: str) -> str:
-    """
-    Normalize interface description specifically - v4.8.8
-    
-    Removes all non-printable characters and normalizes whitespace
-    while preserving the actual content of the description.
-    """
-    if not desc:
-        return desc
-    
-    # First pass: basic normalization
-    desc = normalize_nxos_string(desc)
-    
-    # Remove hidden characters that might terminate display
-    # Some terminals treat certain characters as string terminators
-    desc = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', desc)
-    
-    # Normalize whitespace to regular spaces
-    desc = re.sub(r'\s+', ' ', desc)
-    
-    # Strip
-    desc = desc.strip()
-    
-    return desc
-
-
-# =============================================================================
 # MIKROTIK OUTPUT CLEANER - v4.8.7
 # =============================================================================
 
@@ -983,159 +877,70 @@ def parse_mikrotik_interfaces(output: str) -> List[Dict[str, Any]]:
 
 
 # =============================================================================
-# CISCO NX-OS INTERFACE PARSER - v4.8.8 FIXED
+# CISCO NX-OS INTERFACE PARSER (v4.8.7 baseline - unchanged)
 # =============================================================================
 
 def parse_cisco_nxos_interfaces(output: str) -> List[Dict[str, Any]]:
-    """
-    Parse Cisco NX-OS show interface status output - v4.8.8 FIXED
-    
-    v4.8.8 FIX: Description dengan spasi tidak lagi terpotong
-    Masalah: "FS(OTB-B T1C1)" menjadi "FS(OTB-B"
-    Solusi: Parse berdasarkan posisi kolom, bukan split by whitespace
-    
-    Format output NX-OS:
-    Port          Name               Status    Vlan      Duplex  Speed   Type
-    --------------------------------------------------------------------------------
-    Eth1/1        FS(OTB-B T1C1)     connected 100       full    10G     10Gbase-SR
-    """
+    """Parse Cisco NX-OS show interface status output"""
     interfaces = []
     
     if not output:
         return interfaces
     
-    # v4.8.8: Normalize output first
-    output = normalize_nxos_string(output)
-    
     lines = output.split('\n')
     in_data = False
-    header_positions = {}
     
     for line in lines:
-        original_line = line
-        line_stripped = line.strip()
+        line = line.strip()
         
-        if not line_stripped:
+        if not line:
             continue
         
-        # Detect header line to get column positions
-        if 'Port' in line and 'Status' in line:
-            # Parse header positions
-            # Find each column header position
-            for col in ['Port', 'Name', 'Status', 'Vlan', 'Duplex', 'Speed', 'Type']:
-                pos = line.find(col)
-                if pos >= 0:
-                    header_positions[col] = pos
-            continue
-        
-        if '----' in line_stripped:
+        if '----' in line:
             in_data = True
+            continue
+        
+        if 'Port' in line and 'Status' in line:
             continue
         
         if not in_data:
             continue
         
-        # v4.8.8: Use column positions if available
-        if header_positions and 'Port' in header_positions:
-            iface_name = ''
-            description = ''
-            status = 'unknown'
-            
-            # Extract interface name (Port column)
-            port_start = header_positions.get('Port', 0)
-            name_start = header_positions.get('Name', 14)
-            
-            # Get interface name - from Port position to Name position
-            if len(original_line) > port_start:
-                port_end = min(name_start, len(original_line))
-                iface_name = original_line[port_start:port_end].strip()
-            
-            # Get description (Name column) - from Name position to Status position
-            status_start = header_positions.get('Status', 32)
-            if len(original_line) > name_start:
-                desc_end = min(status_start, len(original_line))
-                description = original_line[name_start:desc_end].strip()
-                # v4.8.8: Normalize description to remove hidden characters
-                description = normalize_description(description)
-            
-            # Get status - check Status column area
-            if len(original_line) > status_start:
-                vlan_start = header_positions.get('Vlan', status_start + 12)
-                status_text = original_line[status_start:vlan_start].strip().lower()
-                
-                if 'connected' in status_text and 'notconnect' not in status_text:
-                    status = 'up'
-                elif 'notconnect' in status_text:
-                    status = 'down'
-                elif 'disabled' in status_text:
-                    status = 'down'
-                elif 'sfp' in status_text or 'xcvr' in status_text:
-                    status = 'down'
-            
-            # Validate interface name
-            if iface_name and any(c.isdigit() for c in iface_name):
-                interfaces.append({
-                    'name': iface_name,
-                    'status': status,
-                    'description': description,
-                })
-        else:
-            # Fallback: parse without header positions (old method improved)
-            parts = line_stripped.split()
-            if len(parts) < 3:
-                continue
-            
-            iface_name = parts[0]
-            
-            if not any(c.isdigit() for c in iface_name):
-                continue
-            
-            status = 'unknown'
-            description = ''
-            
-            line_lower = line_stripped.lower()
-            
-            # Find status keyword position
-            status_keywords = ['connected', 'notconnect', 'disabled', 'sfpabsent', 'xcvrnotse', 'linknotco']
-            status_pos = -1
-            status_word = ''
-            
-            for kw in status_keywords:
-                pos = line_lower.find(kw)
-                if pos > 0:
-                    status_pos = pos
-                    status_word = kw
-                    break
-            
-            # v4.8.8: Extract description as everything between interface name and status
-            if status_pos > 0:
-                # Find where interface name ends
-                iface_end = len(iface_name)
-                while iface_end < len(line_stripped) and line_stripped[iface_end] == ' ':
-                    iface_end += 1
-                
-                # Description is between interface name and status
-                if iface_end < status_pos:
-                    description = line_stripped[iface_end:status_pos].strip()
-                    description = normalize_description(description)
-            
-            # Determine status
-            if 'connected' in line_lower and 'notconnect' not in line_lower:
-                status = 'up'
-            elif 'notconnect' in line_lower:
-                status = 'down'
-            elif 'disabled' in line_lower:
-                status = 'down'
-            elif 'sfp not' in line_lower or 'sfpabsent' in line_lower:
-                status = 'down'
-            elif 'xcvr not' in line_lower or 'xcvrnotse' in line_lower:
-                status = 'down'
-            
-            interfaces.append({
-                'name': iface_name,
-                'status': status,
-                'description': description,
-            })
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        
+        iface_name = parts[0]
+        
+        if not any(c.isdigit() for c in iface_name):
+            continue
+        
+        status = 'unknown'
+        description = ''
+        
+        line_lower = line.lower()
+        
+        if 'connected' in line_lower and 'notconnect' not in line_lower:
+            status = 'up'
+        elif 'notconnect' in line_lower:
+            status = 'down'
+        elif 'disabled' in line_lower:
+            status = 'down'
+        elif 'sfp not' in line_lower:
+            status = 'down'
+        elif 'xcvr not' in line_lower:
+            status = 'down'
+        
+        if len(parts) >= 2:
+            desc = parts[1]
+            if desc != '--':
+                description = desc
+        
+        interfaces.append({
+            'name': iface_name,
+            'status': status,
+            'description': description,
+        })
     
     return interfaces
 

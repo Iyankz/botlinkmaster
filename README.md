@@ -486,10 +486,50 @@ sudo journalctl -u botlinkmaster -f   # Live log
 
 ---
 
-## [📝 Changelog](CHANGELOG.md)
+## 📝 Changelog
 
-### v4.8.8 — Multi-Vendor Bug Fixes
+### v4.8.8 — Vendor-Specific Bug Fixes (Minimal)
 **Release Type:** Bug Fix (Non-breaking)
+
+#### Fixed
+- **Cisco NX-OS**: Description terpotong jika mengandung spasi
+  - Masalah: "FS(OTB-B T1C1)" tampil sebagai "FS(OTB-B"
+  - Solusi: Ambil description dari `show running-config interface`
+- **Huawei VRP/Quidway**: Status interface UNKNOWN
+  - Masalah: /cek dan /redaman menampilkan UNKNOWN padahal port UP
+  - Solusi: Tambah pattern untuk non-CloudEngine devices
+
+#### Notes
+- Minimal changes, v4.8.7 baseline preserved
+- MikroTik, CloudEngine, dan vendor lain tidak terpengaruh
+- Database compatible dengan versi sebelumnya
+
+---
+
+### v4.8.7 — SSH & Telnet Fixes
+
+#### Fixed
+- **MikroTik CRS326**: SSH algorithm compatibility untuk RouterOS 7.16.x
+- **Telnet**: Login detection yang salah kirim command sebagai username
+- **Huawei CE6855**: Menggunakan `display interface description`
+
+---
+
+### v4.7.0 — Multi-Vendor Expansion
+
+#### Added
+- Support 18 vendor
+- Optical power monitoring
+- Interface pagination
+
+---
+
+### v4.6.0 — Initial Stable Release
+
+#### Added
+- Multi-vendor support
+- SSH dan Telnet support
+- Legacy device compatibility
 
 ---
 
@@ -518,7 +558,7 @@ Pull request dan issue welcome di GitHub repository.
 
 **Catatan:** Untuk bantuan lebih lanjut, gunakan `/help` dan `/help2` di bot.
 
-## Dibuat dengan ❤️ oleh [Iyankz](https://Iyankz.github.io) & **Brother**
+## Dibuat dengan ❤️ oleh [Iyankz](https://github.com/Iyankz)
 
 ## Lisensi
 
