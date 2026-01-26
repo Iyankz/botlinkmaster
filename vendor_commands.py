@@ -548,7 +548,7 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
     ),
     
     # ==========================================================================
-    # GENERIC
+    # GENERIC - v4.8.8: More inclusive patterns as fallback
     # ==========================================================================
     Vendor.GENERIC.value: VendorConfig(
         name="Generic",
@@ -571,10 +571,24 @@ VENDOR_CONFIGS: Dict[str, VendorConfig] = {
         tx_power_patterns=[
             r"(?:Tx|TX|Transmit)\s*(?:Power|power)[:\s\|]+(-?\d+\.?\d*)",
         ],
-        status_up_patterns=[r"(?:line protocol|status|state|link)\s+(?:is\s+)?up", r"is\s+UP"],
-        status_down_patterns=[r"(?:line protocol|status|state|link)\s+(?:is\s+)?down", r"is\s+DOWN"],
+        # v4.8.8: More inclusive patterns to catch various vendor formats
+        status_up_patterns=[
+            r"(?:line protocol|status|state|link)\s+(?:is\s+)?up",
+            r"is\s+UP",
+            r"current\s+state\s*:\s*UP",  # Huawei style
+            r"Physical\s+state\s*:\s*Up",  # Huawei VRP
+            r"PHY[:\s]+up",  # Huawei brief
+        ],
+        status_down_patterns=[
+            r"(?:line protocol|status|state|link)\s+(?:is\s+)?down",
+            r"is\s+DOWN",
+            r"current\s+state\s*:\s*DOWN",  # Huawei style
+            r"Physical\s+state\s*:\s*Down",  # Huawei VRP
+            r"PHY[:\s]+down",  # Huawei brief
+            r"Administratively\s+DOWN",
+        ],
         description_pattern=r"[Dd]escription[:\s]+(.+?)(?:\n|$)",
-        notes="Generic fallback",
+        notes="Generic fallback - v4.8.8: Improved patterns",
     ),
 }
 
