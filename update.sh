@@ -1,9 +1,10 @@
 #!/bin/bash
 #
-# BotLinkMaster v4.8.7 - Update Script
+# BotLinkMaster v4.8.8 - Update Script
 # 
 # Features:
 # - Version checking (local vs remote)
+# - Checksum-based update detection (v4.8.8+)
 # - Automatic backup before update
 # - Rollback capability
 # - Preserves user configuration
@@ -11,6 +12,7 @@
 # Usage: 
 #   ./update.sh          - Check and update to latest version
 #   ./update.sh --force  - Force update without version check
+#   ./update.sh --diff   - Check file changes (checksum comparison)
 #   ./update.sh --rollback [backup_dir] - Rollback to previous version
 #
 # GitHub: https://github.com/YOUR_USERNAME/botlinkmaster
@@ -27,7 +29,7 @@ GITHUB_BRANCH="main"
 # ============================================
 
 REPO_URL="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${GITHUB_BRANCH}"
-SCRIPT_VERSION="4.8.7"
+SCRIPT_VERSION="4.8.8"
 
 # Colors
 RED='\033[0;31m'
@@ -89,8 +91,11 @@ print_usage() {
     echo "  ./update.sh              - Check and update to latest version"
     echo "  ./update.sh --force      - Force update without version check"
     echo "  ./update.sh --check      - Check for updates only (no install)"
+    echo "  ./update.sh --diff       - Check file changes (checksum comparison)"
     echo "  ./update.sh --rollback   - Rollback to previous backup"
     echo "  ./update.sh --help       - Show this help"
+    echo ""
+    echo "v4.8.8: Now supports checksum-based updates for hotfixes"
     echo ""
 }
 
@@ -141,6 +146,66 @@ version_compare() {
     return 0
 }
 
+# v4.8.8: Checksum-based update detection
+get_file_checksum() {
+    local file="$1"
+    if [ -f "$file" ]; then
+        md5sum "$file" 2>/dev/null | cut -d' ' -f1
+    else
+        echo "missing"
+    fi
+}
+
+get_remote_checksum() {
+    local file="$1"
+    local content
+    content=$(wget -q -O - "${REPO_URL}/${file}" 2>/dev/null)
+    if [ -n "$content" ]; then
+        echo "$content" | md5sum | cut -d' ' -f1
+    else
+        echo "error"
+    fi
+}
+
+check_file_changes() {
+    # v4.8.8: Compare local files with remote using checksum
+    echo -e "${YELLOW}Checking file changes (checksum comparison)...${NC}"
+    echo ""
+    
+    local changed_files=()
+    local all_files=("${UPDATE_FILES[@]}" "${SCRIPT_FILES[@]}" "${DOC_FILES[@]}")
+    
+    for file in "${all_files[@]}"; do
+        local local_sum=$(get_file_checksum "$file")
+        local remote_sum=$(get_remote_checksum "$file")
+        
+        if [ "$remote_sum" = "error" ]; then
+            echo -e "  $file: ${YELLOW}⊘ (remote unavailable)${NC}"
+            continue
+        fi
+        
+        if [ "$local_sum" = "missing" ]; then
+            echo -e "  $file: ${CYAN}+ (new file)${NC}"
+            changed_files+=("$file")
+        elif [ "$local_sum" != "$remote_sum" ]; then
+            echo -e "  $file: ${GREEN}↑ (changed)${NC}"
+            changed_files+=("$file")
+        else
+            echo -e "  $file: ${BLUE}= (same)${NC}"
+        fi
+    done
+    
+    echo ""
+    
+    if [ ${#changed_files[@]} -eq 0 ]; then
+        echo -e "${GREEN}✓ All files are up to date!${NC}"
+        return 0
+    else
+        echo -e "${CYAN}↑ ${#changed_files[@]} file(s) have changes available${NC}"
+        return 2
+    fi
+}
+
 check_for_updates() {
     echo -e "${YELLOW}Checking for updates...${NC}"
     echo ""
@@ -165,6 +230,17 @@ check_for_updates() {
     
     if [ $result -eq 0 ]; then
         echo -e "${GREEN}✓ You are running the latest version!${NC}"
+        echo ""
+        # v4.8.8: Even if version is same, check for file changes (hotfixes)
+        echo -e "${YELLOW}Checking for file changes (hotfixes)...${NC}"
+        check_file_changes
+        local file_result=$?
+        if [ $file_result -eq 2 ]; then
+            echo ""
+            echo -e "${CYAN}↑ File changes detected (hotfix available)${NC}"
+            echo -e "Use ${GREEN}./update.sh --force${NC} to apply changes"
+            return 2
+        fi
         return 0
     elif [ $result -eq 1 ]; then
         echo -e "${YELLOW}⚠ Your version is newer than remote (development version?)${NC}"
@@ -450,6 +526,11 @@ case "${1:-}" in
         ;;
     --check|-c)
         check_for_updates
+        exit $?
+        ;;
+    --diff|-d)
+        echo -e "${YELLOW}Checking file changes...${NC}"
+        check_file_changes
         exit $?
         ;;
     --force|-f)

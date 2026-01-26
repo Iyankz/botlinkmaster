@@ -6,6 +6,34 @@ Format berdasarkan [Keep a Changelog](https://keepachangelog.com/id-ID/1.0.0/).
 
 ---
 
+## [4.8.8] - 2025-01-26
+
+### Fixed
+- **Cisco NX-OS**: Description dengan spasi tidak lagi terpotong
+  - Masalah: "FS(OTB-B T1C1)" tampil sebagai "FS(OTB-B"
+  - Penyebab: Karakter non-printable/invisible dalam output NX-OS
+  - Solusi: `normalize_nxos_string()` untuk membersihkan karakter aneh
+  - Parsing berbasis posisi kolom, bukan split by whitespace
+- **Huawei Non-CloudEngine (Quidway/S-Series)**: Status interface UNKNOWN
+  - Masalah: /cek dan /redaman menampilkan UNKNOWN padahal port UP
+  - Penyebab: Keyword status berbeda dari CloudEngine
+  - Solusi: Tambah pattern "Physical state", "Line protocol current state"
+- **Optical Status**: Tidak lagi tergantung interface status
+  - Jika RX/TX power valid, optical status tetap GOOD/EXCELLENT
+  - Walaupun interface status UNKNOWN
+
+### Added
+- `normalize_nxos_string()` - Normalisasi string NX-OS
+- `normalize_description()` - Normalisasi description interface
+- Pattern status untuk Huawei Non-CloudEngine/Quidway
+
+### Changed
+- `update.sh` sekarang mendukung update berbasis perubahan file (checksum)
+  - Hotfix tanpa version bump bisa langsung ter-pull
+  - Gunakan `--force` untuk update walaupun version sama
+
+---
+
 ## [4.8.7] - 2025-01-22
 
 ### Fixed

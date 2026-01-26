@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# BotLinkMaster v4.8.7 - Installation Script
+# BotLinkMaster v4.8.8 - Installation Script
 # 
 # Usage: chmod +x install.sh && ./install.sh
 #
@@ -123,7 +123,7 @@ else
         echo -e "${GREEN}✓ Created .env from .env.example${NC}"
     else
         cat > .env << 'EOF'
-# BotLinkMaster v4.8.7 Configuration
+# BotLinkMaster v4.8.8 Configuration
 
 # Telegram Bot Token from @BotFather (REQUIRED)
 TELEGRAM_BOT_TOKEN=

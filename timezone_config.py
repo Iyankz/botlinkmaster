@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.8.7 - Timezone Configuration
+BotLinkMaster v4.8.8 - Timezone Configuration
 IANA Timezone support with examples from each continent
 
 Author: BotLinkMaster

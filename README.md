@@ -1,28 +1,20 @@
-# BotLinkMaster v4.8.7
+# BotLinkMaster v4.8.8
 
 Bot Telegram untuk monitoring perangkat jaringan (router dan switch) dengan dukungan multi-vendor dan optical power monitoring.
 
-![Version](https://img.shields.io/badge/Version-4.8.7-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-4.8.8-blue?style=for-the-badge)
 ![Release](https://img.shields.io/github/v/release/Iyankz/botlinkmaster?style=for-the-badge)
 ![Release Date](https://img.shields.io/github/release-date/Iyankz/botlinkmaster?style=for-the-badge)
 ![Last Commit](https://img.shields.io/github/last-commit/Iyankz/botlinkmaster?style=for-the-badge)
 ![Stability](https://img.shields.io/badge/Release-Stable-success?style=for-the-badge)
 ![NOC Ready](https://img.shields.io/badge/NOC-Ready-critical?style=for-the-badge)
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue?style=for-the-badge&logo=python)
-![Ubuntu 22.04](https://img.shields.io/badge/Ubuntu-22.04%20LTS-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)
-![Ubuntu 24.04](https://img.shields.io/badge/Ubuntu-24.04%20LTS-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)
-![Debian 12](https://img.shields.io/badge/Debian-12%20(Bookworm)-A81D33?style=for-the-badge&logo=debian&logoColor=white)
-![Debian 13](https://img.shields.io/badge/Debian-13%20(Trixie)-A81D33?style=for-the-badge&logo=debian&logoColor=white)
+![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04%2B-orange?style=for-the-badge&logo=ubuntu)
 ![Telegram Bot](https://img.shields.io/badge/Telegram-Bot-blue?style=for-the-badge&logo=telegram)
 ![Protocol](https://img.shields.io/badge/Protocol-SSH%20%7C%20Telnet-darkgreen?style=for-the-badge)
 ![Multi Vendor](https://img.shields.io/badge/Vendor-18%2B-success?style=for-the-badge)
 ![License](https://img.shields.io/github/license/Iyankz/botlinkmaster?style=for-the-badge)
 
----
-
-☕ **Setiap baris kode mengandung 1 gram kafein Arabika — karena solusi yang baik lahir dari fokus dan konsistensi.**
-
----
 
 ## Fitur Utama
 
@@ -173,6 +165,9 @@ Script akan otomatis:
 # Force update tanpa cek versi
 ./update.sh --force
 
+# Cek perubahan file (checksum comparison) - v4.8.8+
+./update.sh --diff
+
 # Rollback ke backup terakhir
 ./update.sh --rollback
 
@@ -183,9 +178,11 @@ Script akan otomatis:
 ./update.sh --help
 ```
 
+> 💡 **v4.8.8+**: Update script sekarang mendukung checksum-based update. Hotfix tanpa version bump akan terdeteksi dan bisa di-apply dengan `--force`.
+
 ### Metode 2: Manual Update
 
-**Dari v4.5.x / v4.6.x / v4.7.x / v4.8.x ke v4.8.7:**
+**Dari v4.5.x / v4.6.x / v4.7.x / v4.8.x ke v4.8.8:**
 
 ```bash
 cd ~/botlinkmaster
@@ -438,6 +435,29 @@ sudo journalctl -u botlinkmaster -f
 sudo systemctl restart botlinkmaster
 ```
 
+### MikroTik CRS326/CRS317 tidak merespons
+
+v4.8.8 sudah memperbaiki masalah ini:
+- Extended timeout untuk switch besar
+- Support algorithm legacy SSH
+- Improved prompt detection
+
+Jika masih bermasalah:
+1. Pastikan vendor diset ke `mikrotik`
+2. Pastikan user SSH memiliki akses penuh
+3. Cek RouterOS version (minimum v6.x)
+
+### Huawei CE6855 interface tidak lengkap
+
+v4.8.8 fix:
+- Menggunakan `display interface description` untuk list interface
+- Extended timeout untuk switch dengan banyak port
+
+### Cisco IOS interface brief error
+
+v4.8.8 fix:
+- Menggunakan `show interface brief` (bukan `show ip interface brief`)
+
 ### Error: Connection Timeout
 
 1. Pastikan IP dan port benar
@@ -468,29 +488,53 @@ sudo journalctl -u botlinkmaster -f   # Live log
 
 ## 📝 Changelog
 
-### v4.8.7 — Bug Fixes & Compatibility
+### v4.8.8 — Multi-Vendor Bug Fixes
 **Release Type:** Bug Fix (Non-breaking)
 
 #### Fixed
-- **MikroTik**: SSH algorithm compatibility untuk RouterOS 7.16.x
-- **MikroTik**: Extended timeout (30s → 60s) untuk switch dengan banyak interface
-- **Huawei**: Menggunakan `display interface description` untuk list interface yang lebih akurat
-- **Cisco IOS**: Perbaikan command
-- **Telnet**: Perbaikan total koneksi
-  - FIX: Login detection yang salah kirim command sebagai username
-  - Proper login sequence (banner → login → password → prompt)
-  - Idle-based reading seperti SSH
-  - Support MikroTik, Cisco, Huawei, dll
+- **Cisco NX-OS**: Description dengan spasi tidak lagi terpotong
+  - Masalah: "FS(OTB-B T1C1)" tampil sebagai "FS(OTB-B"
+  - Solusi: normalize_nxos_string() + parsing berbasis posisi kolom
+- **Huawei Non-CloudEngine (Quidway/S-Series)**: Status interface UNKNOWN
+  - Masalah: /cek dan /redaman menampilkan UNKNOWN padahal port UP
+  - Solusi: Tambah pattern "Physical state", "Line protocol current state"
+- **Optical Status**: Tidak lagi tergantung interface status
+  - Jika RX/TX valid, optical status tetap GOOD/EXCELLENT
 
-#### Improved
-- Prompt detection untuk berbagai vendor
-- Hard timeout meningkat untuk perangkat dengan respons lambat
-- Konsistensi versi di semua file
+#### Added
+- `update.sh --diff` untuk cek perubahan file (checksum comparison)
+- Checksum-based update detection untuk hotfix tanpa version bump
 
 #### Notes
-- Tidak ada perubahan API
 - Aman untuk upgrade dari v4.5.x, v4.6.x, v4.7.x, v4.8.x
 - Database compatible dengan versi sebelumnya
+
+---
+
+### v4.8.7 — SSH & Telnet Fixes
+
+#### Fixed
+- **MikroTik CRS326**: SSH algorithm compatibility untuk RouterOS 7.16.x
+- **Telnet**: Login detection yang salah kirim command sebagai username
+- **Huawei CE6855**: Menggunakan `display interface description`
+
+---
+
+### v4.7.0 — Multi-Vendor Expansion
+
+#### Added
+- Support 18 vendor
+- Optical power monitoring
+- Interface pagination
+
+---
+
+### v4.6.0 — Initial Stable Release
+
+#### Added
+- Multi-vendor support
+- SSH dan Telnet support
+- Legacy device compatibility
 
 ---
 
@@ -519,7 +563,7 @@ Pull request dan issue welcome di GitHub repository.
 
 **Catatan:** Untuk bantuan lebih lanjut, gunakan `/help` dan `/help2` di bot.
 
-## Dibuat dengan ❤️ oleh [Iyankz](https://Iyankz.github.io)
+## Dibuat dengan ❤️ oleh [Iyankz](https://github.com/Iyankz)
 
 ## Lisensi
 

@@ -1,28 +1,24 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.8.7 - Network Device Connection Module
+BotLinkMaster v4.8.8 - Network Device Connection Module
 SSH/Telnet support for routers and switches
+
+CHANGELOG v4.8.8:
+- FIX: Cisco NX-OS description terpotong jika ada spasi
+- FIX: Huawei Non-CloudEngine (Quidway/S-Series) status UNKNOWN
+- FIX: Optical status tidak lagi tergantung interface status
+- IMPROVED: normalize_nxos_string() untuk membersihkan karakter non-printable
 
 CHANGELOG v4.8.7:
 - FIX: MikroTik CRS326 SSH algorithm compatibility for RouterOS 7.16.x
 - FIX: Extended timeouts (30s → 60s) for switches with many interfaces
-- FIX: Improved prompt detection for various vendors
 - FIX: Telnet login detection - was sending commands as username!
 - FIX: Telnet now properly detects Login:/Username:/Password: prompts
-- FIX: Telnet execute now uses idle-based reading like SSH
-- ADD: Additional legacy SSH algorithms for older devices
-- ADD: _wait_for_prompt_telnet() method for Telnet prompt detection
-- IMPROVED: Hard timeout increased for slow-responding devices
-- IMPROVED: Telnet login sequence: banner → login → password → prompt
-
-CHANGELOG v4.8.6:
-- FIX: MikroTik menggunakan "/interface ethernet print without-paging"
-- FIX: Timeout MikroTik ditambah ke 30s untuk device dengan banyak interface
 
 Note: OLT support will be available in v5.0.0
 
 Author: BotLinkMaster
-Version: 4.8.7
+Version: 4.8.8
 """
 
 import paramiko
@@ -923,7 +919,13 @@ class BotLinkMaster:
         }
     
     def _get_cisco_nxos_interface_status(self, interface_name: str) -> Dict[str, Any]:
-        """Get Cisco NX-OS interface status"""
+        """
+        Get Cisco NX-OS interface status - v4.8.8 FIXED
+        
+        v4.8.8 FIX: Description dengan spasi tidak lagi terpotong
+        """
+        from vendor_commands import normalize_description, normalize_nxos_string
+        
         result = {
             'name': interface_name,
             'full_name': interface_name,
@@ -936,27 +938,94 @@ class BotLinkMaster:
         result['raw_output'] = output
         
         if output:
-            for line in output.split('\n'):
+            # v4.8.8: Normalize output first
+            output = normalize_nxos_string(output)
+            
+            lines = output.split('\n')
+            header_positions = {}
+            
+            for line in lines:
+                original_line = line
                 line_lower = line.lower()
                 iface_lower = interface_name.lower()
                 
-                if iface_lower in line_lower or iface_lower.replace('/', '') in line_lower:
-                    parts = line.split()
-                    if len(parts) >= 3:
-                        if len(parts) >= 2 and parts[1] != '--':
-                            result['description'] = parts[1]
+                # Parse header to get column positions
+                if 'port' in line_lower and 'status' in line_lower:
+                    for col in ['Port', 'Name', 'Status', 'Vlan', 'Duplex', 'Speed', 'Type']:
+                        pos = line.find(col)
+                        if pos < 0:
+                            pos = line.lower().find(col.lower())
+                        if pos >= 0:
+                            header_positions[col] = pos
+                    continue
+                
+                # Check if this line contains our interface
+                if iface_lower not in line_lower and iface_lower.replace('/', '') not in line_lower:
+                    continue
+                
+                # v4.8.8: Use column positions to extract description properly
+                if header_positions and 'Name' in header_positions:
+                    name_start = header_positions.get('Name', 14)
+                    status_start = header_positions.get('Status', 32)
+                    
+                    # Extract description between Name and Status columns
+                    if len(original_line) > name_start:
+                        desc_end = min(status_start, len(original_line))
+                        result['description'] = normalize_description(original_line[name_start:desc_end].strip())
+                    
+                    # Extract status from Status column
+                    if len(original_line) > status_start:
+                        vlan_start = header_positions.get('Vlan', status_start + 12)
+                        status_text = original_line[status_start:vlan_start].strip().lower()
                         
-                        if 'connected' in line_lower and 'notconnect' not in line_lower:
+                        if 'connected' in status_text and 'notconnect' not in status_text:
                             result['status'] = 'up'
-                        elif 'notconnect' in line_lower:
+                        elif 'notconnect' in status_text:
                             result['status'] = 'down'
-                        elif 'disabled' in line_lower:
+                        elif 'disabled' in status_text:
                             result['status'] = 'down'
-                        elif 'sfp not' in line_lower or 'xcvr not' in line_lower:
+                        elif 'sfp' in status_text or 'xcvr' in status_text:
                             result['status'] = 'down'
+                else:
+                    # Fallback: find status keyword position and extract description
+                    status_keywords = ['connected', 'notconnect', 'disabled', 'sfpabsent', 'xcvrnotse']
+                    status_pos = -1
+                    
+                    for kw in status_keywords:
+                        pos = line_lower.find(kw)
+                        if pos > 0:
+                            status_pos = pos
+                            break
+                    
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        # Find where interface name ends
+                        iface_end = line_lower.find(iface_lower) + len(iface_lower)
+                        if iface_end < 0:
+                            iface_end = len(parts[0])
                         
-                        if result['status'] != 'unknown':
-                            return result
+                        # Skip whitespace after interface name
+                        while iface_end < len(line) and line[iface_end] == ' ':
+                            iface_end += 1
+                        
+                        # Description is between interface name and status
+                        if status_pos > iface_end:
+                            result['description'] = normalize_description(line[iface_end:status_pos].strip())
+                        elif len(parts) >= 2 and parts[1] != '--':
+                            result['description'] = normalize_description(parts[1])
+                    
+                    # Parse status
+                    if 'connected' in line_lower and 'notconnect' not in line_lower:
+                        result['status'] = 'up'
+                    elif 'notconnect' in line_lower:
+                        result['status'] = 'down'
+                    elif 'disabled' in line_lower:
+                        result['status'] = 'down'
+                    elif 'sfp not' in line_lower or 'xcvr not' in line_lower:
+                        result['status'] = 'down'
+                
+                if result['status'] != 'unknown':
+                    return result
         
         cmd = f"show interface {interface_name}"
         output2 = self.execute_command(cmd, wait_time=5.0)
@@ -964,7 +1033,7 @@ class BotLinkMaster:
         if output2:
             result['raw_output'] = output2
             result['status'] = self.optical_parser.parse_interface_status(output2)
-            result['description'] = self.optical_parser.parse_description(output2)
+            result['description'] = normalize_description(self.optical_parser.parse_description(output2))
         
         return result
     
@@ -1097,18 +1166,18 @@ class BotLinkMaster:
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("BotLinkMaster v4.8.7 - Network Device Connection Module")
+    print("BotLinkMaster v4.8.8 - Network Device Connection Module")
     print("=" * 60)
     print("\nSupported Vendors:")
     from vendor_commands import get_supported_vendors
     for i, v in enumerate(get_supported_vendors(), 1):
         print(f"  {i:2}. {v}")
+    print("\nv4.8.8 Fixes:")
+    print("  - Cisco NX-OS: Description dengan spasi tidak lagi terpotong")
+    print("  - Huawei Non-CloudEngine (Quidway/S-Series): Status UNKNOWN fixed")
+    print("  - Optical status tidak lagi tergantung interface status")
+    print("  - normalize_nxos_string() untuk karakter non-printable")
     print("\nv4.8.7 Fixes:")
     print("  - MikroTik CRS326 SSH algorithm compatibility")
-    print("  - Extended timeouts for large switches")
-    print("  - Improved prompt detection")
-    print("  - Additional legacy SSH algorithms")
-    print("  - Telnet: Fixed login detection (was sending cmd as username)")
-    print("  - Telnet: Proper Login:/Username:/Password: detection")
-    print("  - Telnet: Idle-based reading (like SSH)")
+    print("  - Telnet: Fixed login detection")
     print("\nNote: OLT support will be available in v5.0.0")

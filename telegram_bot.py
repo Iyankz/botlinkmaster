@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
 """
-BotLinkMaster v4.8.7 - Telegram Bot
+BotLinkMaster v4.8.8 - Telegram Bot
 Network device monitoring with multi-vendor optical power support
 
-CHANGELOG v4.8.7:
+CHANGELOG v4.8.8:
+- FIX: Cisco NX-OS description terpotong jika ada spasi
+- FIX: Huawei Non-CloudEngine (Quidway/S-Series) status UNKNOWN
+- FIX: Optical status tidak lagi tergantung interface status
+
+CHANGELOG v4.8.8:
 - FIX: MikroTik CRS326 SSH algorithm compatibility for RouterOS 7.16.x
 - FIX: Huawei CE6855 using "display interface description" for interface list
 - FIX: Cisco IOS using "show interface brief" (not "show ip interface brief")
 - IMPROVED: Extended timeouts for large switches
-- IMPROVED: Consistent versioning across all files
 
 Author: BotLinkMaster
-Version: 4.8.7
+Version: 4.8.8
 """
 
 import os
@@ -79,7 +83,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     chat_id = update.effective_chat.id
     await update.message.reply_text(
-        f"🤖 BotLinkMaster v4.8.7\n"
+        f"🤖 BotLinkMaster v4.8.8\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"Bot monitoring perangkat jaringan.\n"
         f"Support 18 vendor router & switch.\n\n"
@@ -99,7 +103,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await update.message.reply_text(
-        "🔧 BANTUAN BOTLINKMASTER v4.8.7\n"
+        "🔧 BANTUAN BOTLINKMASTER v4.8.8\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "📋 INFO:\n"
         "/start - Info bot + Chat ID\n"
@@ -369,7 +373,7 @@ async def delete_device(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def list_interfaces(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     List all interfaces with pagination
-    v4.8.7: Support unlimited interfaces
+    v4.8.8: Support unlimited interfaces
     """
     if not await check_auth(update):
         return
@@ -650,7 +654,7 @@ def main():
         print("ERROR: TELEGRAM_BOT_TOKEN tidak ditemukan di .env")
         return
     
-    logger.info("Starting BotLinkMaster v4.8.7...")
+    logger.info("Starting BotLinkMaster v4.8.8...")
     
     app = Application.builder().token(token).build()
     
@@ -675,15 +679,14 @@ def main():
     app.add_error_handler(error_handler)
     
     print("\n" + "=" * 50)
-    print("BotLinkMaster v4.8.7 Started!")
+    print("BotLinkMaster v4.8.8 Started!")
     print("=" * 50)
     print(f"\nTimezone: {tz_manager.get_timezone()}")
     print(f"Time: {tz_manager.get_current_time()}")
-    print("\nv4.8.7 Fixes:")
-    print("  - MikroTik CRS326 SSH algorithm compatibility")
-    print("  - Huawei CE6855 interface description")
-    print("  - Cisco IOS show interface brief")
-    print("  - Extended timeouts for large switches")
+    print("\nv4.8.8 Fixes:")
+    print("  - Cisco NX-OS: Description dengan spasi tidak lagi terpotong")
+    print("  - Huawei Non-CloudEngine (Quidway/S-Series): Status UNKNOWN fixed")
+    print("  - Optical status independent dari interface status")
     print("\nNote: OLT support will be available in v5.0.0")
     print("\n[Press Ctrl+C to stop]\n")
     
