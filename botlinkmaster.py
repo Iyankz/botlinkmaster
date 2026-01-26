@@ -758,12 +758,14 @@ class BotLinkMaster:
         return self._parse_default_interfaces(output)
     
     def _get_cisco_nxos_interfaces(self) -> List[Dict[str, Any]]:
-        """Get Cisco NX-OS interfaces"""
+        """Get Cisco NX-OS interfaces - v4.8.8: Full descriptions from running-config"""
         commands = [
             "show interface status",
             "show interface brief",
             "show interface description",
         ]
+        
+        interfaces = []
         
         for cmd in commands:
             logger.info(f"Cisco NX-OS: Trying {cmd}")
@@ -774,9 +776,84 @@ class BotLinkMaster:
                 interfaces = parse_cisco_nxos_interfaces(output)
                 if interfaces:
                     logger.info(f"Cisco NX-OS: Parsed {len(interfaces)} interfaces")
-                    return interfaces
+                    break
         
-        return self._parse_default_interfaces(output if output else "")
+        if not interfaces:
+            return self._parse_default_interfaces(output if output else "")
+        
+        # v4.8.8 FIX: Get full descriptions from running-config
+        # This fixes truncated descriptions like "xcon:OLT" instead of "xcon:OLT C300A 1/19/1"
+        descriptions = self._get_all_nxos_descriptions()
+        if descriptions:
+            for iface in interfaces:
+                iface_name = iface.get('name', '')
+                # Try exact match first
+                if iface_name in descriptions:
+                    iface['description'] = descriptions[iface_name]
+                else:
+                    # Try normalized match (Eth1/1 vs Ethernet1/1)
+                    normalized = iface_name.replace('Eth', 'Ethernet')
+                    if normalized in descriptions:
+                        iface['description'] = descriptions[normalized]
+            logger.info(f"Cisco NX-OS: Enhanced {len(descriptions)} descriptions from running-config")
+        
+        return interfaces
+    
+    def _get_all_nxos_descriptions(self) -> Dict[str, str]:
+        """
+        v4.8.8: Get all interface descriptions from running-config
+        
+        Returns dict of {interface_name: description}
+        This is more efficient than calling running-config per interface.
+        """
+        descriptions = {}
+        
+        try:
+            # Get running-config with interface sections
+            cmd = "show running-config | section ^interface"
+            output = self.execute_command(cmd, wait_time=10.0)
+            
+            if not output or 'Invalid' in output:
+                # Fallback: try without section filter
+                cmd = "show running-config"
+                output = self.execute_command(cmd, wait_time=15.0)
+            
+            if not output:
+                return descriptions
+            
+            current_interface = None
+            
+            for line in output.split('\n'):
+                line_stripped = line.strip()
+                
+                # Detect interface line: "interface Ethernet1/1"
+                if line_stripped.lower().startswith('interface '):
+                    current_interface = line_stripped[10:].strip()
+                    # Normalize: remove any trailing characters
+                    if current_interface:
+                        logger.debug(f"NX-OS: Found interface {current_interface}")
+                
+                # Detect description line: "  description xcon:OLT C300A 1/19/1"
+                elif current_interface and line_stripped.lower().startswith('description '):
+                    desc = line_stripped[12:].strip()
+                    if desc:
+                        descriptions[current_interface] = desc
+                        # Also store with short name (Eth1/1 format)
+                        short_name = current_interface.replace('Ethernet', 'Eth')
+                        descriptions[short_name] = desc
+                        logger.debug(f"NX-OS: {current_interface} -> {desc}")
+                
+                # Reset on new interface or end of interface block
+                elif line_stripped.startswith('!') or (line_stripped and not line_stripped.startswith(' ') and not line_stripped.lower().startswith('interface')):
+                    if current_interface and line_stripped.startswith('!'):
+                        current_interface = None
+            
+            logger.info(f"NX-OS: Got {len(descriptions)//2} descriptions from running-config")
+            
+        except Exception as e:
+            logger.warning(f"NX-OS: Failed to get descriptions from running-config: {e}")
+        
+        return descriptions
     
     def _get_mikrotik_interfaces(self) -> List[Dict[str, Any]]:
         """Get MikroTik interfaces - v4.8.7 improved for CRS326"""
