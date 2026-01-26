@@ -486,55 +486,10 @@ sudo journalctl -u botlinkmaster -f   # Live log
 
 ---
 
-## 📝 Changelog
+## [📝 Changelog](CHANGELOG.md)
 
 ### v4.8.8 — Multi-Vendor Bug Fixes
 **Release Type:** Bug Fix (Non-breaking)
-
-#### Fixed
-- **Cisco NX-OS**: Description dengan spasi tidak lagi terpotong
-  - Masalah: "FS(OTB-B T1C1)" tampil sebagai "FS(OTB-B"
-  - Solusi: normalize_nxos_string() + parsing berbasis posisi kolom
-- **Huawei Non-CloudEngine (Quidway/S-Series)**: Status interface UNKNOWN
-  - Masalah: /cek dan /redaman menampilkan UNKNOWN padahal port UP
-  - Solusi: Tambah pattern "Physical state", "Line protocol current state"
-- **Optical Status**: Tidak lagi tergantung interface status
-  - Jika RX/TX valid, optical status tetap GOOD/EXCELLENT
-
-#### Added
-- `update.sh --diff` untuk cek perubahan file (checksum comparison)
-- Checksum-based update detection untuk hotfix tanpa version bump
-
-#### Notes
-- Aman untuk upgrade dari v4.5.x, v4.6.x, v4.7.x, v4.8.x
-- Database compatible dengan versi sebelumnya
-
----
-
-### v4.8.7 — SSH & Telnet Fixes
-
-#### Fixed
-- **MikroTik CRS326**: SSH algorithm compatibility untuk RouterOS 7.16.x
-- **Telnet**: Login detection yang salah kirim command sebagai username
-- **Huawei CE6855**: Menggunakan `display interface description`
-
----
-
-### v4.7.0 — Multi-Vendor Expansion
-
-#### Added
-- Support 18 vendor
-- Optical power monitoring
-- Interface pagination
-
----
-
-### v4.6.0 — Initial Stable Release
-
-#### Added
-- Multi-vendor support
-- SSH dan Telnet support
-- Legacy device compatibility
 
 ---
 
@@ -563,7 +518,7 @@ Pull request dan issue welcome di GitHub repository.
 
 **Catatan:** Untuk bantuan lebih lanjut, gunakan `/help` dan `/help2` di bot.
 
-## Dibuat dengan ❤️ oleh [Iyankz](https://github.com/Iyankz)
+## Dibuat dengan ❤️ oleh [Iyankz](https://Iyankz.github.io) & **Brother**
 
 ## Lisensi
 
