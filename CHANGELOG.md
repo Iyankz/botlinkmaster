@@ -13,24 +13,22 @@ Format berdasarkan [Keep a Changelog](https://keepachangelog.com/id-ID/1.0.0/).
   - Masalah: "xcon:OLT C300A 1/19/1" tampil sebagai "xcon:OLT"
   - Solusi: `/int` sekarang mengambil description dari `show running-config | section interface`
   - `/cek` mengambil dari `show running-config interface <iface>`
-  - Status parsing tetap dari `show interface status` (tidak diubah)
-- **Huawei VRP/Quidway (Non-CloudEngine)**: Status interface UNKNOWN
-  - Masalah: /cek dan /redaman menampilkan UNKNOWN padahal port UP
-  - Solusi: Tambah pattern "current state : UP" dan "Line protocol current state"
-  - Pattern ditambahkan ke Huawei config DAN generic config sebagai fallback
+- **Huawei VRP/Quidway**: Status interface UNKNOWN
+  - Masalah: `/cek` dan `/redaman` menampilkan UNKNOWN padahal port UP
+  - Root cause: `'Error' in output` terlalu luas - menangkap "Total Error:" di statistik
+  - Solusi: `_is_command_error()` hanya cek 5 baris pertama untuk error pattern
 - **Generic vendor patterns**: Lebih inklusif untuk berbagai format vendor
   - Sekarang juga mengenali format Huawei "current state : UP/DOWN"
-  - Device tanpa vendor tetap bisa dideteksi statusnya dengan benar
 
 ### Added
-- `_get_all_nxos_descriptions()` - Get all descriptions efficiently from running-config
+- `_is_command_error()` - Deteksi error command yang lebih akurat
+- `_get_all_nxos_descriptions()` - Get all descriptions from running-config
 - `_get_nxos_description_from_config()` - Get single interface description
 
 ### Notes
 - Minimal changes, v4.8.7 baseline preserved
-- MikroTik, CloudEngine, dan vendor lain tidak terpengaruh
+- MikroTik, CloudEngine, Cisco IOS tidak terpengaruh
 - Database compatible dengan versi sebelumnya
-- **REKOMENDASI**: Selalu set vendor yang benar untuk hasil optimal
 
 ---
 
