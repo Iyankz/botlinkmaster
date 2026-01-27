@@ -982,7 +982,10 @@ class BotLinkMaster:
         cmd = self.vendor_config.show_interface.format(interface=full_interface)
         output = self.execute_command(cmd, wait_time=5.0)
         
-        if not output or 'Invalid' in output or 'Error' in output:
+        # v4.8.8 FIX: More specific error detection
+        # Old check "'Error' in output" was too broad - caught "Total Error:" in statistics
+        # New check only looks at first few lines for actual command errors
+        if not output or self._is_command_error(output):
             cmd = self.vendor_config.show_interface.format(interface=interface_name)
             output = self.execute_command(cmd, wait_time=5.0)
         
@@ -993,6 +996,38 @@ class BotLinkMaster:
             'description': self.optical_parser.parse_description(output),
             'raw_output': output,
         }
+    
+    def _is_command_error(self, output: str) -> bool:
+        """
+        v4.8.8: Check if output indicates a command error (not statistics)
+        
+        Problem: Huawei "display interface" output contains "Total Error: 709822"
+        in statistics, which triggered false positive with "'Error' in output"
+        
+        Solution: Only check first 5 lines for actual error patterns
+        """
+        if not output:
+            return True
+        
+        # Only check first 5 lines - command errors appear at the start
+        first_lines = '\n'.join(output.split('\n')[:5])
+        
+        # These patterns indicate actual command errors
+        error_indicators = [
+            'Invalid',           # "Invalid input", "Invalid command"
+            'Error:',            # "Error: Wrong parameter" (note colon)
+            'Unrecognized',      # "Unrecognized command"
+            '% ',                # Cisco style "% Invalid input"
+            'Wrong parameter',   # Huawei "Wrong parameter found"
+            'Unknown command',   # Generic
+            'Incomplete command', # Incomplete command error
+        ]
+        
+        for indicator in error_indicators:
+            if indicator in first_lines:
+                return True
+        
+        return False
     
     def _get_cisco_nxos_interface_status(self, interface_name: str) -> Dict[str, Any]:
         """Get Cisco NX-OS interface status"""
